@@ -122,6 +122,22 @@ export function specialize(
   return null;
 }
 
+/**
+ * where a hired unit appears around its building: first the tiles in front of it (the two rows
+ * below it, nearest first), where the building's picture, drawn up from its foot, never covers it;
+ * then the rest of the spiral as before. The plain spiral began with the row above, so new troops
+ * stood behind the castle, out of sight.
+ */
+export const HIRE_SPOTS: readonly (readonly [number, number])[] = (() => {
+  const front = SPIRAL.slice(1)
+    .filter(([dx, dy]) => dy >= 1 && dy <= 2 && Math.abs(dx) <= 2)
+    .sort(
+      (a, b) => a[1] - b[1] || Math.abs(a[0]) - Math.abs(b[0]) || a[0] - b[0],
+    );
+  const rest = SPIRAL.slice(1).filter(o => !front.includes(o));
+  return [...front, ...rest].map(([dx, dy]) => [dx, dy] as const);
+})();
+
 export function train(
   p: Player,
   type: UnitType,
@@ -135,7 +151,7 @@ export function train(
   const d =
     at && !at.dead && at.linked && at.owner === p.id && canHire(at) ? at : p.hq;
   if (!d || d.dead) return msg('error.noCastle');
-  for (const [dx, dy] of SPIRAL.slice(1)) {
+  for (const [dx, dy] of HIRE_SPOTS) {
     const x = d.x + dx;
     const y = d.y + dy;
     if (walkable(x, y) && G.bAt[tileIndex(x, y)] === -1) {
