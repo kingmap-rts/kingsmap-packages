@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "allowImportingTsExtensions": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "types": ["node"],
+    "paths": {
+      "@kingmap-rts/kingsmap-protocol": ["../kingsmap-protocol/src/index.ts"],
+      "@kingmap-rts/kingsmap-types": ["../kingsmap-types/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "test/**/*", "vitest.config.ts"]
+}

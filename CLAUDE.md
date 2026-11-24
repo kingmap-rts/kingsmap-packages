@@ -1,19 +1,19 @@
-# arteries-packages — notes for Claude
+# kingsmap-packages — notes for Claude
 
-Private packages of Kings Map published to GitHub Packages (Yarn workspaces + lerna),
+Private packages of King's Map published to GitHub Packages (Yarn workspaces + lerna),
 modelled on `land-packages`. Each package has its own `CLAUDE.md` with conventions:
-`packages/arteries-protocol`, `packages/arteries-core`.
+`packages/kingsmap-protocol`, `packages/kingsmap-core`.
 
 ## Where types go
 
-All types shared between projects live in `@kingmap-rts/arteries-types` — nowhere else:
+All types shared between projects live in `@kingmap-rts/kingsmap-types` — nowhere else:
 
 - every backend endpoint: request bodies, query/params, responses, WebSocket messages
   (`api/`, `net/` in the package);
 - the front end's types that describe data from the server or the game (`game/`, `net/`);
 - shared constants as enums.
   Packages, the backend and the front import them from there; a project keeps a type locally only
-  when nothing outside it uses it. A new endpoint or message = its types in arteries-types first,
+  when nothing outside it uses it. A new endpoint or message = its types in kingsmap-types first,
   then a version bump (minor if it changes what crosses the wire), then the code in the projects.
 
 ## Package manager: Yarn only

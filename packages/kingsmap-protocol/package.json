@@ -1,0 +1,46 @@
+{
+  "name": "@kingmap-rts/kingsmap-protocol",
+  "version": "0.5.0",
+  "description": "Validators for what players send to the King's Map server (intents, match statistics) and the seat layout; types live in @kingmap-rts/kingsmap-types",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "require": "./lib/index.js",
+      "default": "./lib/index.js"
+    }
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('./lib',{recursive:true,force:true})\"",
+    "build": "yarn clean && tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit",
+    "prepack": "yarn build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kingmap-rts/kingsmap-packages",
+    "directory": "packages/kingsmap-protocol"
+  },
+  "license": "UNLICENSED",
+  "keywords": [
+    "protocol",
+    "types",
+    "kingsmap"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@kingmap-rts/kingsmap-types": "workspace:^"
+  }
+}

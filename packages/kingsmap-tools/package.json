@@ -1,0 +1,25 @@
+{
+  "name": "@kingmap-rts/kingsmap-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Balance and QA tools for King's Map: headless bot matches, match statistics export, online soak tests (not published)",
+  "type": "module",
+  "scripts": {
+    "sim": "tsx src/sim/run.ts",
+    "one": "tsx src/sim/one.ts",
+    "cmap": "tsx src/sim/cmap.ts",
+    "stats:export": "tsx src/stats/export.ts",
+    "net:client": "tsx src/net/client.ts",
+    "net:soak": "tsx src/net/soak.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kingmap-rts/kingsmap-core": "workspace:^",
+    "@kingmap-rts/kingsmap-types": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3"
+  }
+}

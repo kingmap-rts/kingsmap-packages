@@ -1,8 +1,8 @@
 {
-  "name": "arteries-packages",
+  "name": "kingsmap-packages",
   "version": "1.0.0",
   "private": true,
-  "description": "Private packages of the Kings Map game shared by arteries-front and arteries-backend",
+  "description": "Private packages of the King's Map game shared by kingsmap-front and kingsmap-backend",
   "engines": {
     "node": ">=22.0.0"
   },
@@ -15,9 +15,9 @@
     "clean": "lerna run clean",
     "test": "lerna run test --stream",
     "typecheck": "lerna run typecheck",
-    "publish:types": "dotenv -- yarn workspace @kingmap-rts/arteries-types npm publish",
-    "publish:protocol": "dotenv -- yarn workspace @kingmap-rts/arteries-protocol npm publish",
-    "publish:core": "dotenv -- yarn workspace @kingmap-rts/arteries-core npm publish",
+    "publish:types": "dotenv -- yarn workspace @kingmap-rts/kingsmap-types npm publish",
+    "publish:protocol": "dotenv -- yarn workspace @kingmap-rts/kingsmap-protocol npm publish",
+    "publish:core": "dotenv -- yarn workspace @kingmap-rts/kingsmap-core npm publish",
     "format": "prettier --write \"**/*.{js,ts,json,md,yml,yaml}\"",
     "check-formatting": "prettier -l \"**/*.{js,ts,json,md,yml,yaml}\"",
     "fix-formatting": "prettier --write \"**/*.{js,ts,json,md,yml,yaml}\"",
@@ -26,13 +26,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kingmap-rts/arteries-packages.git"
+    "url": "git+https://github.com/kingmap-rts/kingsmap-packages.git"
   },
   "author": "kingmap-rts",
   "license": "UNLICENSED",
-  "homepage": "https://github.com/kingmap-rts/arteries-packages#readme",
+  "homepage": "https://github.com/kingmap-rts/kingsmap-packages#readme",
   "bugs": {
-    "url": "https://github.com/kingmap-rts/arteries-packages/issues"
+    "url": "https://github.com/kingmap-rts/kingsmap-packages/issues"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
