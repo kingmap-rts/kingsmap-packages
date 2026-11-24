@@ -16,6 +16,9 @@ export interface LobbyPlayer {
 export type ServerError =
   'hello_first' | 'room_not_found' | 'room_started' | 'room_full';
 
+/** what a started match is doing before its first turn (see the `prestart` message) */
+export type PrestartPhase = 'waiting' | 'countdown';
+
 /** client → server */
 export type ClientMsg =
   | { t: 'hello'; nick: string; token?: string }
@@ -27,6 +30,8 @@ export type ClientMsg =
   | { t: 'start' }
   | { t: 'leave' }
   | { t: 'list' }
+  /** after `start`: the match world is built on this client and the map is on screen */
+  | { t: 'ready' }
   | { t: 'i'; i: Intent }
   | { t: 'hash'; n: number; h: string }
   /** the game ended on this client at turn n (sent once) */
@@ -52,6 +57,21 @@ export type ServerMsg =
       humans: Record<number, string>;
       seat: number;
       code: string;
+    }
+  /**
+   * Between `start` and turn 0. `waiting`: the server waits until every player sends `ready`, at
+   * most until `at`; seats still not ready then go to bots. `countdown`: turn 0 starts at `at`.
+   * `at` and `now` are the server's clock (ms): a client counts down `at - now` from the moment the
+   * message arrived, so its own clock does not matter. Intents sent before `at` are dropped.
+   */
+  | {
+      t: 'prestart';
+      phase: PrestartPhase;
+      /** players who sent `ready` / human seats of the match */
+      ready: number;
+      total: number;
+      at: number;
+      now: number;
     }
   /** turn n: intents to apply (in this order) before simulating tick n */
   | { t: 'turn'; n: number; i: SeatIntent[] }
