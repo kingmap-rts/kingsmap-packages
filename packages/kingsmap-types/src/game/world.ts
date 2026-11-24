@@ -76,6 +76,8 @@ export interface Unit extends EntityBase {
   tgt: number;
   /** forced target (attack order), 0 if none */
   ftgt: number;
+  /** post this unit was ordered to capture (it does not shoot that post), 0 or absent if none */
+  capB?: number;
   dest: Tile | null;
   repath: number;
   order?: 'move' | 'amove' | null;

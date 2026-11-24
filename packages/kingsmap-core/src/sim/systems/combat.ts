@@ -1,6 +1,6 @@
 /** Targeting, shooting, damage, death and elimination. */
 import { Color } from '@kingmap-rts/kingsmap-types';
-import type { Entity, Unit } from '../world/types';
+import type { Building, Entity, Unit } from '../world/types';
 import { RESOURCES } from '../config/economy';
 import { COLORS, SEATS } from '../config/map';
 import { UNITS } from '../config/units';
@@ -162,7 +162,21 @@ export function countTargets() {
   }
 }
 
+/** a post that troops can still be ordered to capture from seat */
+export function capturable(b: Entity | undefined, seat: number): b is Building {
+  return (
+    !!b &&
+    !b.dead &&
+    b.kind === 'b' &&
+    b.type === 'depot' &&
+    !b.linked &&
+    hostile(seat, b.owner)
+  );
+}
+
 export function acquireTarget(u: Unit) {
+  // a capture order lapses once the post is ours (or an ally's), destroyed, or linked again
+  if (u.capB && !capturable(G.byId.get(u.capB), u.owner)) u.capB = 0;
   if (u.type === 'wagon') {
     u.tgt = 0;
     return;
@@ -188,7 +202,7 @@ export function acquireTarget(u: Unit) {
     let bb = null;
     let bdd = S.range + 0.4;
     for (const b of G.buildings) {
-      if (b.dead || !hostile(u.owner, b.owner)) continue;
+      if (b.dead || b.id === u.capB || !hostile(u.owner, b.owner)) continue;
       if (Math.abs(b.x + 0.5 - u.x) > bdd || Math.abs(b.y + 0.5 - u.y) > bdd)
         continue;
       const e = dist(b.x + 0.5, b.y + 0.5, u.x, u.y);
@@ -234,7 +248,7 @@ export function acquireTarget(u: Unit) {
   if (!best) {
     bd = 2.6;
     for (const b of G.buildings) {
-      if (b.dead || !hostile(u.owner, b.owner)) continue;
+      if (b.dead || b.id === u.capB || !hostile(u.owner, b.owner)) continue;
       const e = dist(b.x + 0.5, b.y + 0.5, u.x, u.y);
       if (e < bd) {
         bd = e;

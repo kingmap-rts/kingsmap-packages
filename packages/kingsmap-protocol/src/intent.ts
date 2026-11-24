@@ -14,6 +14,7 @@ import {
 const PLAYER_INTENTS = new Set<string>([
   'move',
   'attack',
+  'capture',
   'stop',
   'build',
   'train',
@@ -116,8 +117,9 @@ export function cleanIntent(x: any): Intent | null {
           }
         : null;
     case 'attack':
+    case 'capture':
       return ids(x.ids) && num(x.target)
-        ? { t: 'attack', ids: x.ids, target: x.target }
+        ? { t: x.t, ids: x.ids, target: x.target }
         : null;
     case 'stop':
       return ids(x.ids) ? { t: 'stop', ids: x.ids } : null;

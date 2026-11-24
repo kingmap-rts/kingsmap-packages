@@ -24,7 +24,8 @@ import {
   say,
 } from '../systems/diplomacy';
 import { trade } from '../systems/market';
-import { orderAttack, orderMove } from '../systems/movement';
+import { orderAttack, orderCapture, orderMove } from '../systems/movement';
+import { capturable } from '../systems/combat';
 import { cast, choosePath, pickPerk } from '../systems/paths';
 import { formSquads, unsquad } from '../systems/squads';
 import { canHire } from '../world/entities';
@@ -56,12 +57,21 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       else if (e && !e.dead && e.owner !== seat) return msg('error.ally');
       return null;
     }
+    case 'capture': {
+      const e = G.byId.get(c.target);
+      if (!e || e.dead || e.owner === seat) return null;
+      if (!hostile(seat, e.owner)) return msg('error.ally');
+      if (!capturable(e, seat)) return msg('error.notCapturable');
+      orderCapture(mine(c.ids), e);
+      return null;
+    }
     case 'stop':
       for (const u of mine(c.ids)) {
         u.path = null;
         u.dest = null;
         u.tgt = 0;
         u.ftgt = 0;
+        u.capB = 0;
         u.order = null;
       }
       return null;

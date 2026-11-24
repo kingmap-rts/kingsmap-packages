@@ -13,6 +13,8 @@ import type {
 export type Intent =
   | { t: 'move'; ids: number[]; x: number; y: number; mode?: 'move' | 'amove' }
   | { t: 'attack'; ids: number[]; target: number }
+  /** walk to a hostile post and take it: the troops stand by it and never shoot that post */
+  | { t: 'capture'; ids: number[]; target: number }
   | { t: 'stop'; ids: number[] }
   | { t: 'build'; x: number; y: number }
   | { t: 'train'; type: UnitType }

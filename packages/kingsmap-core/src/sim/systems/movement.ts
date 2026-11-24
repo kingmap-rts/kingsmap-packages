@@ -1,5 +1,5 @@
 /** Moving along paths and move/attack orders. */
-import type { Entity, Unit } from '../world/types';
+import type { Building, Entity, Unit } from '../world/types';
 import { MAP_H, MAP_W, Terrain } from '../config/map';
 import { terrainMap } from '../state';
 import { findPath } from './pathfinding';
@@ -104,10 +104,21 @@ export function orderMove(
     u.dest = [gx, gy];
     u.tgt = 0;
     u.ftgt = 0;
+    u.capB = 0;
     u.job = null;
     u.joinTo = 0;
     u.order = mode || 'amove';
   }
+}
+
+/**
+ * Take a hostile post: walk to it like a plain move (not stopping for foes on the way), then stand
+ * by it and fight back the enemy troops that come, but never shoot that post (see acquireTarget).
+ * The order lapses when the post is ours, gone, or cannot be captured any more.
+ */
+export function orderCapture(units: Unit[], b: Building) {
+  orderMove(units, b.x, b.y, 'move');
+  for (const u of units) u.capB = b.id;
 }
 
 export function orderAttack(units: Unit[], ent: Entity) {
@@ -115,6 +126,7 @@ export function orderAttack(units: Unit[], ent: Entity) {
     u.joinTo = 0;
     u.order = 'amove';
     u.ftgt = ent.id;
+    u.capB = 0;
     u.tgt = ent.id;
     u.path = null;
     u.repath = 0;
