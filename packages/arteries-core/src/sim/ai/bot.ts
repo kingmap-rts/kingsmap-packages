@@ -16,7 +16,7 @@ import { Deposit, Terrain } from '../config/map';
 import { POST_RADIUS, ROAD_LEN } from '../config/network';
 import { PATHS } from '../config/paths';
 import { UNITS } from '../config/units';
-import { unitCost } from '../modifiers';
+import { unitCost, unitUnlocked } from '../modifiers';
 import { G, depositMap, sites, terrainMap } from '../state';
 import { hostile } from '../systems/diplomacy';
 import { orderAttack, orderMove } from '../systems/movement';
@@ -153,7 +153,12 @@ export function botTick(p: Player) {
       type = 'siege';
     // a doctrine unit now and then, only when it is affordable (otherwise hire the usual soldier) and useful:
     // builders only while one of our roads burns, arsonists only once there is an enemy network to burn
-    if (p.doc && type !== 'wagon' && rand() < 0.22) {
+    if (
+      p.doc &&
+      unitUnlocked(p, PATHS[p.doc].unit) &&
+      type !== 'wagon' &&
+      rand() < 0.22
+    ) {
       const uu = PATHS[p.doc].unit;
       const lim = uu === 'militia' ? 14 : uu === 'golem' ? 4 : 3;
       const useful =

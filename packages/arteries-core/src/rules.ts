@@ -73,7 +73,18 @@ export {
   PING_KINDS,
   SAY_KINDS,
 } from './sim/config/diplomacy';
-export { PATH_COST, ULT_COOLDOWN, PATHS, PERKS } from './sim/config/paths';
+export {
+  PATH_COST,
+  ULT_COOLDOWN,
+  PATHS,
+  PERKS,
+  PERK_IDS,
+  PATH_ROOT,
+  BRANCHES,
+  nodeCost,
+} from './sim/config/paths';
+export { nodeRefusal } from './sim/systems/paths';
+export { unitUnlocked } from './sim/modifiers';
 
 // ---- pure helpers ----
 export { tileIndex, inBounds, dist, segmentDist } from './sim/util/geometry';

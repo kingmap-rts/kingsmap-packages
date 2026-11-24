@@ -1,15 +1,42 @@
 /** Bots choose a path, buy tiers and use the ultimate. */
-import type { Building, PathId, Player, Point, Unit } from '../world/types';
-import { PATHS, PATH_COST } from '../config/paths';
+import type {
+  Building,
+  PathId,
+  PerkId,
+  Player,
+  Point,
+  Unit,
+} from '../world/types';
+import { PATHS, PERKS, PERK_IDS, nodeCost } from '../config/paths';
 import { ultimateOf } from '../modifiers';
 import { G } from '../state';
 import { hostile } from '../systems/diplomacy';
-import { cast, choosePath, pickPerk } from '../systems/paths';
+import { cast, nodeRefusal, pickPerk } from '../systems/paths';
 import { dist } from '../util/geometry';
 import { randomInt, rand } from '../util/rng';
 import { isDepot, nearest } from '../world/entities';
 
-// bots: choose a doctrine at 3💎, buy tiers when they can, use the ult with simple heuristics
+/** the nodes a bot wants next: down its path's branch (the boons at random), now and then the trunk */
+function nextNode(p: Player, d: PathId): PerkId | null {
+  const open = PERK_IDS.filter(
+    id => !nodeRefusal({ ...p, res: { ...p.res, crystal: 1e9 } } as Player, id),
+  );
+  if (!open.length) return null;
+  const mine = open.filter(id => PERKS[id].branch === d);
+  const trunk = open.filter(id => PERKS[id].branch === 'trunk');
+  const pool =
+    mine.length && (!trunk.length || rand() < 0.75)
+      ? mine
+      : trunk.length
+        ? trunk
+        : open;
+  const tier = Math.min(...pool.map(id => PERKS[id].tier));
+  const best = pool.filter(id => PERKS[id].tier === tier);
+  return best[randomInt(0, best.length - 1)];
+}
+
+// bots: walk down one path's branch (with a trunk node now and then) as mana allows, use the
+// ability with simple heuristics
 export function botPaths(
   p: Player,
   army: Unit[],
@@ -18,18 +45,14 @@ export function botPaths(
 ) {
   const P = p.ai.P;
   if (P.noDoc) return;
-  if (!p.doc) {
-    if (p.res.crystal >= PATH_COST[0]) {
-      const ds = Object.keys(PATHS) as PathId[];
-      choosePath(
-        p,
-        P.doc && PATHS[P.doc] ? P.doc : ds[randomInt(0, ds.length - 1)],
-      );
-    }
-    return;
+  if (!p.ai.path) {
+    const ds = Object.keys(PATHS) as PathId[];
+    p.ai.path = P.doc && PATHS[P.doc] ? P.doc : ds[randomInt(0, ds.length - 1)];
   }
-  if (p.perks.length < 3 && p.res.crystal >= PATH_COST[p.perks.length + 1])
-    pickPerk(p, rand() < 0.5 ? 0 : 1);
+  if (p.res.crystal >= nodeCost(p.perks.length)) {
+    const id = nextNode(p, p.ai.path);
+    if (id) pickPerk(p, id);
+  }
   const id = ultimateOf(p);
   if (!id || p.ultCd > G.t) return;
   const foeB = G.buildings.filter(

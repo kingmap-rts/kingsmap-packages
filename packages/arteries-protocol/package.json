@@ -1,6 +1,6 @@
 {
   "name": "@kingmap-rts/arteries-protocol",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Validators for what players send to the Kings Map server (intents, match statistics) and the seat layout; types live in @kingmap-rts/arteries-types",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",

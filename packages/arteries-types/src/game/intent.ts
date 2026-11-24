@@ -1,6 +1,7 @@
 import type {
   GiftResource,
   PathId,
+  PerkId,
   PingKind,
   SayKind,
   SpecType,
@@ -20,11 +21,11 @@ export type Intent =
   | { t: 'spawn'; b: number }
   /** hire troops automatically */
   | { t: 'auto'; on: boolean }
-  /** choose a path (Шлях) for 3 mana */
+  /** take the root node of a path's branch (the same as perk with that root) */
   | { t: 'doctrine'; d: PathId }
-  /** buy the next tier of the path, option 0 or 1 */
-  | { t: 'perk'; i: 0 | 1 }
-  /** use the tier-4 ability at a map point */
+  /** buy a node of the skill tree */
+  | { t: 'perk'; id: PerkId }
+  /** use the ability (a tier-5 node) at a map point */
   | { t: 'cast'; x: number; y: number }
   /** walk the selected units of one type together into squads (up to 5 light / 3 heavy) */
   | { t: 'squad'; ids: number[] }

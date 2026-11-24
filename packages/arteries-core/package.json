@@ -1,6 +1,6 @@
 {
   "name": "@kingmap-rts/arteries-core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Deterministic simulation of Kings Map (lockstep): the same seed and intents give the same world in the browser and on the server",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",

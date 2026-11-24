@@ -90,6 +90,10 @@ export function addUnit(type: UnitType, owner: number, x: number, y: number) {
     u.hp *= 1.25;
     u.maxhp *= 1.25;
   }
+  if (type !== 'wagon' && hasPerk(G.players[owner], 'drill')) {
+    u.hp *= 1.1;
+    u.maxhp *= 1.1;
+  }
   u.mhp = u.maxhp;
   if (S.ammo && hasPerk(G.players[owner], 'ammo')) u.ammo = S.ammo * 1.5;
   G.units.push(u);

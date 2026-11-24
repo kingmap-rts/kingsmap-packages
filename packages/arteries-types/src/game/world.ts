@@ -195,6 +195,8 @@ export interface BotState {
   tfoeUntil?: number;
   /** campaign: target building id, peak group size, last progress time and place */
   gT?: number;
+  /** the path whose branch the bot climbs */
+  path?: PathId;
   gPeak?: number;
   gProgT?: number;
   gLast?: [number, number];

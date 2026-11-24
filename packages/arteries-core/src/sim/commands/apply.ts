@@ -3,6 +3,7 @@ import type {
   Building,
   GameMessage,
   PathId,
+  PerkId,
   PingKind,
   SayKind,
   SpecType,
@@ -114,7 +115,7 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
     case 'ping':
       return ping(p, +c.x || 0, +c.y || 0, String(c.k) as PingKind);
     case 'perk':
-      return pickPerk(p, c.i ? 1 : 0);
+      return pickPerk(p, String(c.id) as PerkId);
     case 'cast':
       return cast(p, +c.x || 0, +c.y || 0);
     case 'leave':

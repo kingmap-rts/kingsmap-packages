@@ -1,5 +1,11 @@
 // The shapes of the rule tables (the numbers live in @kingmap-rts/arteries-core → rules).
-import type { PathId, PerkId, Resource, UnitType } from './vocabulary';
+import type {
+  BranchId,
+  PathId,
+  PerkId,
+  Resource,
+  UnitType,
+} from './vocabulary';
 
 export interface UnitSpec {
   hp: number;
@@ -54,13 +60,19 @@ export interface SiteSpec {
 }
 
 export interface PathSpec {
-  /** unique unit of the path */
+  /** unique unit of the path (unlocked by one node of its branch) */
   unit: UnitType;
-  /** tiers 2-4: pick one of two */
-  perks: [PerkId, PerkId][];
 }
 
+/** a node of the skill tree */
 export interface PerkSpec {
-  /** tier-4 ability used with cast */
+  branch: BranchId;
+  /** its row in the branch: 1 = the root, 5 = the abilities */
+  tier: number;
+  /** one of these must be taken first; none: open from the start */
+  req?: PerkId[];
+  /** unlocks this unit for hire */
+  unit?: UnitType;
+  /** an ability used with cast; a realm takes only one */
   ult?: 1;
 }

@@ -1,7 +1,7 @@
 /** Choosing a path, buying tiers and casting the ultimate. */
-import type { GameMessage, PathId, Player } from '../world/types';
+import type { GameMessage, PathId, PerkId, Player } from '../world/types';
 import { COLORS, SEATS } from '../config/map';
-import { PATHS, PATH_COST, ULT_COOLDOWN } from '../config/paths';
+import { PATH_ROOT, PERKS, ULT_COOLDOWN, nodeCost } from '../config/paths';
 import { ultimateOf } from '../modifiers';
 import { G } from '../state';
 import { hit } from './combat';
@@ -41,37 +41,44 @@ export function fireRainTick(dt: number) {
   G.zones = G.zones.filter(z => z.until > G.t);
 }
 
-export function choosePath(p: Player, d: PathId): GameMessage | null {
-  if (p.doc) return msg('error.pathChosen');
-  if (!PATHS[d]) return msg('error.noSuchPath');
-  if (p.res.crystal < PATH_COST[0])
-    return msg('error.needMana', { amount: PATH_COST[0] });
-  p.res.crystal -= PATH_COST[0];
-  p.doc = d;
-  p.perks = [];
-  p.stats.docAt = Math.round(G.t);
-  G.netT = 0;
-  logEvent('doctrine', p.id, { d });
-  for (let i = 0; i < SEATS; i++)
-    notify(
-      i,
-      i === p.id
-        ? msg('notice.pathChosenYou', { path: d })
-        : msg('notice.pathChosen', { player: p.id, path: d }),
-    );
+/** why a node cannot be bought now, or null when it can */
+export function nodeRefusal(p: Player, id: PerkId): GameMessage | null {
+  const n = PERKS[id];
+  if (!n) return msg('error.noSuchPerk');
+  if (p.perks.includes(id)) return msg('error.perkTaken');
+  if (n.req && !n.req.some(r => p.perks.includes(r)))
+    return msg('error.perkLocked', { perk: n.req[0] });
+  if (n.ult) {
+    const has = ultimateOf(p);
+    if (has) return msg('error.oneAbility', { perk: has });
+  }
+  const cost = nodeCost(p.perks.length);
+  if (p.res.crystal < cost) return msg('error.needMana', { amount: cost });
   return null;
 }
 
-export function pickPerk(p: Player, i: number): GameMessage | null {
-  if (!p.doc) return msg('error.choosePathFirst');
-  const tier = p.perks.length;
-  if (tier >= 3) return msg('error.allTiersOpen');
-  const cost = PATH_COST[tier + 1];
-  if (p.res.crystal < cost) return msg('error.needMana', { amount: cost });
-  const id = PATHS[p.doc].perks[tier][i ? 1 : 0];
-  p.res.crystal -= cost;
+/** buy a node of the skill tree */
+export function pickPerk(p: Player, id: PerkId): GameMessage | null {
+  const no = nodeRefusal(p, id);
+  if (no) return no;
+  const n = PERKS[id];
+  p.res.crystal -= nodeCost(p.perks.length);
   p.perks.push(id);
   logEvent('perk', p.id, { id });
+  // the first step on a path names the realm's path for everyone
+  if (n.branch !== 'trunk' && !p.doc) {
+    const d = n.branch;
+    p.doc = d;
+    p.stats.docAt = Math.round(G.t);
+    logEvent('doctrine', p.id, { d });
+    for (let i = 0; i < SEATS; i++)
+      notify(
+        i,
+        i === p.id
+          ? msg('notice.pathChosenYou', { path: d })
+          : msg('notice.pathChosen', { player: p.id, path: d }),
+      );
+  }
   if (id === 'walls')
     for (const b of G.buildings)
       if (
@@ -84,6 +91,12 @@ export function pickPerk(p: Player, i: number): GameMessage | null {
       }
   G.netT = 0;
   return null;
+}
+
+/** the old intent: step onto a path = buy its root */
+export function choosePath(p: Player, d: PathId): GameMessage | null {
+  if (!PATH_ROOT[d]) return msg('error.noSuchPath');
+  return pickPerk(p, PATH_ROOT[d]);
 }
 
 export function cast(p: Player, x: number, y: number): GameMessage | null {

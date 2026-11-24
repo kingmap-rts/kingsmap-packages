@@ -20,9 +20,25 @@ export type BuildingType = 'hq' | 'depot';
 export type SpecType = 'forge' | 'barracks' | 'fort';
 export type SiteType = 'mine' | 'farm' | 'mill' | 'vein';
 
-/** the four paths (Шляхи) a realm can choose with mana */
+/** the four paths (Шляхи): the branches of the skill tree */
 export type PathId = 'guild' | 'shadow' | 'forge' | 'land';
+/** a branch of the skill tree: the shared trunk or one of the paths */
+export type BranchId = PathId | 'trunk';
+/** a node of the skill tree, bought with mana */
 export type PerkId =
+  // the trunk: open to every realm
+  | 'harvest'
+  | 'pace'
+  | 'drill'
+  // each path's root (its trait) and the node that unlocks its own unit
+  | 'longroads'
+  | 'wrights'
+  | 'arson'
+  | 'firebugs'
+  | 'bellows'
+  | 'golems'
+  | 'claim'
+  | 'levies'
   | 'carav'
   | 'cheap'
   | 'repair'

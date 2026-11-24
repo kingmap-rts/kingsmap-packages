@@ -105,7 +105,10 @@ function randomOrders(g: Game) {
             t: 'doctrine',
             d: pick(['guild', 'shadow', 'forge', 'land'] as const),
           }
-        : { t: 'perk', i: rnd() < 0.5 ? 0 : 1 },
+        : {
+            t: 'perk',
+            id: pick(['harvest', 'pace', 'drill', 'carav', 'arson'] as const),
+          },
     );
   else if (r < 0.83)
     sendI({

@@ -12,7 +12,13 @@ import type {
 import { POST_SPECS } from '../config/buildings';
 import { COLORS } from '../config/map';
 import { UNITS } from '../config/units';
-import { buildCost, hasPerk, roadLength, unitCost } from '../modifiers';
+import {
+  buildCost,
+  hasPerk,
+  roadLength,
+  unitCost,
+  unitUnlocked,
+} from '../modifiers';
 import { G, siteAt, sites } from '../state';
 import { hostile } from '../systems/diplomacy';
 import { SPIRAL } from '../systems/movement';
@@ -122,7 +128,7 @@ export function train(
   at: Building | null | undefined,
 ): Unit | GameMessage {
   const S = UNITS[type];
-  if (S.doc && p.doc !== S.doc) return msg('error.otherPath');
+  if (!unitUnlocked(p, type)) return msg('error.otherPath');
   const cost = unitCost(p, type);
   if (!canAfford(p, cost)) return msg('error.noResources');
   if (p.pop < (S.pop || 1)) return msg('error.noPeople');

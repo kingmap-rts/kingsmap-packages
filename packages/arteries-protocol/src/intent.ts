@@ -3,6 +3,7 @@ import {
   type GiftResource,
   type Intent,
   type PathId,
+  type PerkId,
   type PingKind,
   type SayKind,
   type SpecType,
@@ -44,6 +45,43 @@ const UNIT_TYPES: UnitType[] = [
 ];
 const SPECS: SpecType[] = ['forge', 'barracks', 'fort'];
 const PATHS: PathId[] = ['guild', 'shadow', 'forge', 'land'];
+const PERKS: PerkId[] = [
+  'harvest',
+  'pace',
+  'drill',
+  'longroads',
+  'wrights',
+  'arson',
+  'firebugs',
+  'bellows',
+  'golems',
+  'claim',
+  'levies',
+  'carav',
+  'cheap',
+  'repair',
+  'reach',
+  'ward',
+  'road',
+  'burn60',
+  'tough',
+  'bag',
+  'scorch',
+  'panic',
+  'night',
+  'cheapsiege',
+  'deploy',
+  'ammo',
+  'walls',
+  'rain',
+  'rally',
+  'bread',
+  'growth',
+  'labor',
+  'granary',
+  'pitch',
+  'charter',
+];
 const SAYS: SayKind[] = ['hi', 'peace', 'help', 'together', 'thanks', 'warn'];
 const TRADE: TradeResource[] = ['wood', 'ore', 'steel', 'food'];
 const GIFTS: GiftResource[] = ['wood', 'steel', 'food', 'crystal'];
@@ -100,7 +138,7 @@ export function cleanIntent(x: any): Intent | null {
     case 'doctrine':
       return oneOf(PATHS, x.d) ? { t: 'doctrine', d: x.d } : null;
     case 'perk':
-      return { t: 'perk', i: x.i ? 1 : 0 };
+      return oneOf(PERKS, x.id) ? { t: 'perk', id: x.id } : null;
     case 'say':
       return seat(x.to) && oneOf(SAYS, x.k)
         ? { t: 'say', to: x.to, k: x.k }
