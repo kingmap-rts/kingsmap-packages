@@ -1,4 +1,5 @@
 /** Targeting, shooting, damage, death and elimination. */
+import { Color } from '@kingmap-rts/kingsmap-types';
 import type { Entity, Unit } from '../world/types';
 import { RESOURCES } from '../config/economy';
 import { COLORS, SEATS } from '../config/map';
@@ -27,7 +28,7 @@ export function kill(e: Entity, silent?: boolean, by?: number) {
           t: 0,
           dur: 1,
           text: '−' + Math.round(lootCarried(e)),
-          color: '#ff7b72',
+          color: Color.Hit,
         });
       vs.unitsLost++;
       if (ks) ks.kills++;
@@ -315,7 +316,7 @@ export function fire(u: Unit, t: Entity) {
       t: 0,
       dur: 0.5,
       r: 0.9,
-      color: '#ffb27a',
+      color: Color.Spark,
     });
   }
   if (t.kind === 'b' && t.type === 'hq' && t.owner !== u.owner)

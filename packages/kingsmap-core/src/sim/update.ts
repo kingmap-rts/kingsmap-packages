@@ -1,4 +1,5 @@
 /** One simulation tick: every system in a fixed order. */
+import { Color } from '@kingmap-rts/kingsmap-types';
 import type { Building, Unit } from './world/types';
 import { botTick } from './ai/bot';
 import { canAfford, train } from './commands/build';
@@ -195,7 +196,7 @@ export function update(dt: number) {
     const d = dist(c.x, c.y, tx, ty);
     const st = CONVOY_SPEED * convoySpeed(c) * dt;
     if (c.doom && d < c.L0! * 0.5) {
-      G.fx.push({ x: c.x, y: c.y, t: 0, dur: 0.8, r: 1, color: '#ff7b3d' });
+      G.fx.push({ x: c.x, y: c.y, t: 0, dur: 0.8, r: 1, color: Color.Blast });
       kill(c, false, c.doom - 1);
       continue;
     }

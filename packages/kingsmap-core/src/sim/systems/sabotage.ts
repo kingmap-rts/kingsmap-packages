@@ -1,4 +1,5 @@
 /** Burning roads: bandits, arsonists and their traps, builders who put fires out. */
+import { Color } from '@kingmap-rts/kingsmap-types';
 import type { Convoy, Link, Unit } from '../world/types';
 import { RESOURCES } from '../config/economy';
 import { BURN_IMMUNITY } from '../config/network';
@@ -72,7 +73,7 @@ export function sabotageTick(dt: number) {
           t: 0,
           dur: 0.9,
           r: 1.4,
-          color: '#ff7b3d',
+          color: Color.Blast,
         });
         notify(l.owner, msg('notice.roadBurned', { seconds: Math.round(dur) }));
         notify(

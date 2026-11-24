@@ -1,5 +1,5 @@
 /** Map size, terrain and deposit codes and realm colours (the client names the realms). */
-import { Limits } from '@kingmap-rts/kingsmap-types';
+import { Color, Limits } from '@kingmap-rts/kingsmap-types';
 
 export { Deposit, Terrain } from '@kingmap-rts/kingsmap-types';
 
@@ -15,17 +15,17 @@ export const MAP_H = 80;
 export const TILES = MAP_W * MAP_H;
 
 // bright, clearly distinct realm colours (no green: it would vanish on grass)
-export const COLORS = [
-  '#1f6fe0',
-  '#e0302a',
-  '#f2c230',
-  '#8e44d6',
-  '#f07a1a',
-  '#12b5c8',
-  '#e8489a',
-  '#f4f1e8',
-  '#2b2f3a',
-  '#8b5a2b',
+export const COLORS: Color[] = [
+  Color.PlayerBlue,
+  Color.PlayerRed,
+  Color.PlayerYellow,
+  Color.PlayerPurple,
+  Color.PlayerOrange,
+  Color.PlayerCyan,
+  Color.PlayerPink,
+  Color.PlayerWhite,
+  Color.PlayerBlack,
+  Color.PlayerBrown,
 ];
 
 export const CENTRE_OVAL = 0.34;

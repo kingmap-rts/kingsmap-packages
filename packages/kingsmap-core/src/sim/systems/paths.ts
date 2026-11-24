@@ -1,4 +1,5 @@
 /** Choosing a path, buying tiers and casting the ultimate. */
+import { Color } from '@kingmap-rts/kingsmap-types';
 import type { GameMessage, PathId, PerkId, Player } from '../world/types';
 import { COLORS, SEATS } from '../config/map';
 import { PATH_ROOT, PERKS, ULT_COOLDOWN, nodeCost } from '../config/paths';
@@ -35,7 +36,7 @@ export function fireRainTick(dt: number) {
         t: 0,
         dur: 0.6,
         r: 0.8,
-        color: '#ff7b3d',
+        color: Color.Blast,
       });
   }
   G.zones = G.zones.filter(z => z.until > G.t);

@@ -16,6 +16,24 @@ All types shared between projects live in `@kingmap-rts/kingsmap-types` — nowh
   when nothing outside it uses it. A new endpoint or message = its types in kingsmap-types first,
   then a version bump (minor if it changes what crosses the wire), then the code in the projects.
 
+## Colours: the palette only
+
+Every colour of King's Map (front end UI, PixiJS map, and the packages) lives in the `Color` enum in
+`packages/kingsmap-types/src/style/color.ts`, named by purpose (`Color.PlayerRed`, `Color.Blast`),
+values `'#rrggbb'`.
+
+- **Never write a colour literal** in `packages/*/src` (`'#rrggbb'`, `0xrrggbb`, `rgb()`); use
+  `Color.X`. (`0x…` hash and RNG constants in `sim/hash.ts` / `sim/util/rng.ts` are numbers, not colours.)
+- **A new colour goes into the palette first** (reuse a close existing member instead of adding a
+  near-identical one), then it is used. Changing or removing a colour = editing the palette, never a
+  local value. Adding a member is a **minor** bump of kingsmap-types; renaming or removing one breaks
+  consumers (also minor while 0.x, and the front end must follow).
+- Formats: `Color.X` is already a CSS string; `toPixi(Color.X)` gives the PixiJS number and
+  `toCss(Color.X, alpha)` an `rgba()` string (both in kingsmap-core, `src/color.ts`). The front end
+  turns the palette into CSS custom properties `--color-<kebab-name>` for its CSS modules.
+- Colours in the simulation (`COLORS`, `RESOURCE_COLORS`, `fx` colours) end up in the world: keep their
+  values stable or regenerate the golden fixture.
+
 ## Package manager: Yarn only
 
 This project uses **Yarn 4** (Berry, pinned in `package.json` → `packageManager`, run through

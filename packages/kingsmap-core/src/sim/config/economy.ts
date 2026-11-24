@@ -1,4 +1,5 @@
 /** Resources, yields, caravans, food, storage, forging and the market. */
+import { Color } from '@kingmap-rts/kingsmap-types';
 import type { Resource, TradeResource } from '../world/types';
 
 export const RESOURCES: Resource[] = [
@@ -17,12 +18,12 @@ export const LOAD_ORDER: Resource[] = [
   'wood',
 ];
 
-export const RESOURCE_COLORS: Record<Resource, string> = {
-  wood: '#b5793f',
-  ore: '#7d8894',
-  steel: '#e6eef5',
-  food: '#f0cf4a',
-  crystal: '#3fb6ff',
+export const RESOURCE_COLORS: Record<Resource, Color> = {
+  wood: Color.ResourceWood,
+  ore: Color.ResourceOre,
+  steel: Color.ResourceSteel,
+  food: Color.ResourceFood,
+  crystal: Color.ResourceCrystal,
 };
 
 /** experiment knobs for headless balance runs; the game itself never changes them */

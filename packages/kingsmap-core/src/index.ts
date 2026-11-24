@@ -13,3 +13,4 @@
  */
 export { createGame, Game } from './game';
 export * as rules from './rules';
+export { toCss, toPixi, toRgbChannels } from './color';

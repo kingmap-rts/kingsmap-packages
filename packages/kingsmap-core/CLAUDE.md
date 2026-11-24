@@ -39,6 +39,8 @@ the PR, and bump the **minor** version.
 - `sim/commands/apply.ts` — the only entry for player intents; validate inputs there.
 - `sim/ai/*` — bots. They use the same systems and commands as players.
 - `game.ts` — the `Game` object: every public method calls `activate()` first.
+- `color.ts` — `toPixi` / `toCss` / `toRgbChannels` for the `Color` palette of kingsmap-types. The
+  sim never writes a colour literal: fx and realm colours are `Color.X`.
 - `rules.ts` — the explicit read-only facade for UIs. Export from here only what a renderer
   needs; it is part of the public API.
 - World and entity field names are read by renderers and hashed by `sim/hash.ts`: renaming a
