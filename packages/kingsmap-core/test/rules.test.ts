@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { Lockstep, Terrain } from '@kingmap-rts/kingsmap-types';
 import { createGame, rules } from '../src/index';
 
+describe('goodsTotal', () => {
+  const bag = { wood: 1, ore: 2, steel: 3, food: 4, crystal: 5 };
+
+  it('counts the crystals with the other goods', () => {
+    expect(rules.goodsTotal(bag)).toBe(15);
+    expect(
+      rules.goodsTotal({ wood: 0, ore: 0, steel: 0, food: 0, crystal: 2 }),
+    ).toBe(2);
+  });
+
+  it('a bandit carrying only crystals carries something', () => {
+    const game = createGame({ seed: 3, headless: true });
+    const u = game.world.units[0];
+    u.bag = { wood: 0, ore: 0, steel: 0, food: 0, crystal: 7 };
+    expect(rules.lootCarried(u)).toBe(7);
+  });
+});
+
 describe('intents', () => {
   it('train spends resources and population and adds a unit', () => {
     const game = createGame({ seed: 99, headless: true, humans: { 0: 'me' } });

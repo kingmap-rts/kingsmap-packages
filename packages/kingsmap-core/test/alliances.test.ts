@@ -86,6 +86,25 @@ describe('alliances', () => {
     });
   });
 
+  it('a gift of crystals counts in giftsGot', () => {
+    const game = start();
+    const G = game.world;
+    ally(game);
+    const p = G.players[0];
+    const q = G.players[1];
+    p.res.crystal = rules.GIFT_AMOUNT.crystal;
+    const before = q.res.crystal;
+    expect(game.apply(0, { t: 'gift', to: 1, res: 'crystal' })).toBeNull();
+    const c = G.convoys.find(c => c.giftTo === 1)!;
+    for (let i = 0; i < 3000 && !c.dead; i++) game.step();
+    expect(c.dead).toBe(true);
+    expect(q.stats.giftsGot).toBe(rules.GIFT_AMOUNT.crystal);
+    expect(p.stats.giftsSent).toBe(q.stats.giftsGot);
+    expect(q.res.crystal).toBeGreaterThanOrEqual(
+      before + rules.GIFT_AMOUNT.crystal,
+    );
+  });
+
   it('pings are kept for a few seconds', () => {
     const game = start();
     expect(game.apply(0, { t: 'ping', x: 10, y: 10, k: 'attack' })).toBeNull();
