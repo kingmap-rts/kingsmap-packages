@@ -16,6 +16,13 @@ All types shared between projects live in `@kingmap-rts/kingsmap-types` — nowh
   when nothing outside it uses it. A new endpoint or message = its types in kingsmap-types first,
   then a version bump (minor if it changes what crosses the wire), then the code in the projects.
 
+## Versions are the packages' own
+
+Each `@kingmap-rts/*` package has its own semver version, bumped when it is published. They are
+not the game version: game releases (`vX.Y.Z` tags, the `version` of `kingsmap-front/package.json`,
+see "Releases" in kingsmap-front/CLAUDE.md) tag only kingsmap-front and kingsmap-backend, never
+this repo.
+
 ## Colours: the palette only
 
 Every colour of King's Map (front end UI, PixiJS map, and the packages) lives in the `Color` enum in
