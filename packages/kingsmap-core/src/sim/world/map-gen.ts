@@ -20,7 +20,7 @@ import {
 import { dist, tileIndex, detCos, detSin, inBounds } from '../util/geometry';
 import { fbm } from '../util/noise';
 import { randomInt, rand } from '../util/rng';
-import { walkable } from './terrain';
+import { dry } from './terrain';
 
 /** 0 in the middle of the map, 1 at the middle of an edge: an oval that follows the map's shape */
 export const centreDist = (x: number, y: number) =>
@@ -118,7 +118,7 @@ export function genMap() {
   for (let t = 0; t < 1500 && k < 48; t++) {
     const x = randomInt(2, MAP_W - 3);
     const y = randomInt(2, MAP_H - 3);
-    if (walkable(x, y) && farFromStarts(x, y)) {
+    if (dry(x, y) && farFromStarts(x, y)) {
       patch(x, y, 'ore', randomInt(5, 8));
       k++;
     }
@@ -142,7 +142,7 @@ export function genMap() {
       const r = randomInt(9, 11);
       const x = Math.round(sx + Math.cos(a) * r);
       const y = Math.round(sy + Math.sin(a) * r);
-      if (!inBounds(x, y) || !walkable(x, y) || depositMap[tileIndex(x, y)])
+      if (!inBounds(x, y) || !dry(x, y) || depositMap[tileIndex(x, y)])
         continue;
       patch(x, y, 'crystal', 3);
       break;
@@ -157,7 +157,7 @@ export function genMap() {
     const y = randomInt(3, MAP_H - 4);
     if (centreDist(x, y) > CENTRE_OVAL) continue;
     if (
-      !walkable(x, y) ||
+      !dry(x, y) ||
       depositMap[tileIndex(x, y)] ||
       !starts.every(([a, b]) => dist(a, b, x, y) > 12) ||
       !fields.every(([a, b]) => dist(a, b, x, y) >= 7)
@@ -167,7 +167,7 @@ export function genMap() {
       for (let dx = -1; dx <= 1; dx++) {
         const X = x + dx;
         const Y = y + dy;
-        if (!walkable(X, Y)) continue;
+        if (!dry(X, Y)) continue;
         if (dx && dy && rand() < 0.4) continue;
         const kk = tileIndex(X, Y);
         terrainMap[kk] = Terrain.Plain;

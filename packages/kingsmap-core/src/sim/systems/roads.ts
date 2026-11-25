@@ -161,11 +161,16 @@ function pull(terrain: ArrayLike<number>, pts: RoadPt[]): RoadPt[] {
 interface RoadCache {
   route: Map<string, RoadPt[]>;
   tiles: Map<string, Int32Array>;
+  bridges: Map<string, Int32Array>;
 }
 const caches = new WeakMap<object, RoadCache>();
 const cacheOf = (terrain: ArrayLike<number> & object) => {
   let c = caches.get(terrain);
-  if (!c) caches.set(terrain, (c = { route: new Map(), tiles: new Map() }));
+  if (!c)
+    caches.set(
+      terrain,
+      (c = { route: new Map(), tiles: new Map(), bridges: new Map() }),
+    );
   return c;
 };
 
@@ -225,6 +230,112 @@ export function roadTiles(
       }
     }
   }
+  const tiles = Int32Array.from(out);
+  c.set(key, tiles);
+  return tiles;
+}
+
+/** how far a bridge reaches onto the shore past the water's edge, tiles */
+const SHORE = 0.3;
+
+/** half a bridge's width, tiles (the map's bridge tile is 12 px of a 20 px tile) */
+const BRIDGE_HALF = 0.3;
+
+const water = (terrain: ArrayLike<number>, x: number, y: number) =>
+  x >= 0 &&
+  y >= 0 &&
+  x < MAP_W &&
+  y < MAP_H &&
+  terrain[(y | 0) * MAP_W + (x | 0)] === Terrain.Water;
+
+/**
+ * The stretches of the straight line p → q (in tiles) that a bridge spans: where it runs over
+ * water, as fractions [from, to] of its length, a little wider than the water so the bridge rests
+ * on the shores. The map draws its bridges along these and the simulation lets troops walk them.
+ */
+export function bridgeSpans(
+  terrain: ArrayLike<number>,
+  p: RoadPt,
+  q: RoadPt,
+): [number, number][] {
+  const len = vecLen(q[0] - p[0], q[1] - p[1]);
+  if (!len) return [];
+  const n = Math.ceil(len / 0.1);
+  const out: [number, number][] = [];
+  let start = -1;
+  for (let i = 0; i <= n; i++) {
+    const wet = water(
+      terrain,
+      p[0] + ((q[0] - p[0]) * i) / n,
+      p[1] + ((q[1] - p[1]) * i) / n,
+    );
+    if (wet && start < 0) start = i;
+    if ((!wet || i === n) && start >= 0) {
+      const end = wet ? i : i - 1;
+      const pad = SHORE / len;
+      const a = Math.max(0, start / n - pad);
+      const b = Math.min(1, end / n + pad);
+      const last = out[out.length - 1];
+      if (last && a <= last[1]) last[1] = b;
+      else out.push([a, b]);
+      start = -1;
+    }
+  }
+  return out;
+}
+
+/**
+ * The water tiles a bridge of the road between the posts at tiles (ax, ay) and (bx, by) covers:
+ * every water tile under the planks (the bridge's width, not only its middle line) along each
+ * stretch of bridgeSpans of the road's route, and every water tile of roadTiles (so the road never
+ * runs over water off its bridge). Side by side they always join edge to edge, so troops
+ * can walk them tile to tile. Empty when the road crosses no water. Do not change the returned array.
+ */
+export function bridgeTiles(
+  terrain: ArrayLike<number> & object,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): Int32Array {
+  const c = cacheOf(terrain).bridges;
+  const key = `${ax},${ay}>${bx},${by}`;
+  const hit = c.get(key);
+  if (hit) return hit;
+  const pts = roadRoute(terrain, [ax + 0.5, ay + 0.5], [bx + 0.5, by + 0.5]);
+  const out: number[] = [];
+  const seen = new Set<number>();
+  const mark = (x: number, y: number) => {
+    if (!water(terrain, x, y)) return;
+    const k = (y | 0) * MAP_W + (x | 0);
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(k);
+    }
+  };
+  for (let s = 1; s < pts.length; s++) {
+    const p = pts[s - 1];
+    const q = pts[s];
+    const dx = q[0] - p[0];
+    const dy = q[1] - p[1];
+    const len = vecLen(dx, dy);
+    if (!len) continue;
+    // across the bridge, half its width each way
+    const nx = (-dy / len) * BRIDGE_HALF;
+    const ny = (dx / len) * BRIDGE_HALF;
+    for (const [u0, u1] of bridgeSpans(terrain, p, q)) {
+      const n = Math.max(1, Math.ceil(((u1 - u0) * len) / 0.1));
+      for (let i = 0; i <= n; i++) {
+        const u = u0 + ((u1 - u0) * i) / n;
+        const x = p[0] + dx * u;
+        const y = p[1] + dy * u;
+        for (let j = -3; j <= 3; j++) mark(x + (nx * j) / 3, y + (ny * j) / 3);
+      }
+    }
+  }
+  // and any water tile the road's middle line clips at a corner too thin for a span of its own
+  for (const k of roadTiles(terrain, ax, ay, bx, by))
+    mark(k % MAP_W, (k / MAP_W) | 0);
   const tiles = Int32Array.from(out);
   c.set(key, tiles);
   return tiles;

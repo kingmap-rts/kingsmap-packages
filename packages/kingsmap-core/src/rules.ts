@@ -87,8 +87,15 @@ export {
   nodeCost,
 } from './sim/config/paths';
 export { nodeRefusal } from './sim/systems/paths';
-// where a road runs (the map draws it along this route) and whose land cuts it
-export { roadRoute, roadTiles, type RoadPt } from './sim/systems/roads';
+// where a road runs (the map draws it along this route) and whose land cuts it; where it crosses
+// water on a bridge (the map draws it along bridgeSpans, troops walk the bridgeTiles)
+export {
+  roadRoute,
+  roadTiles,
+  bridgeSpans,
+  bridgeTiles,
+  type RoadPt,
+} from './sim/systems/roads';
 export { roadLandCut } from './sim/systems/network';
 export { unitUnlocked } from './sim/modifiers';
 

@@ -17,6 +17,7 @@ export function newMatch(seed: number): Match {
     sites: [],
     siteAt: new Int16Array(TILES).fill(-1),
     crystalFields: [],
+    bridges: new Uint8Array(TILES),
   };
 }
 
@@ -34,6 +35,8 @@ export let sites: Site[];
 export let siteAt: Int16Array;
 /** centres of the big mana fields */
 export let crystalFields: Tile[];
+/** 1 on every water tile a standing bridge covers */
+export let bridgeMap: Uint8Array;
 
 export function activate(m: Match): void {
   matchState = m;
@@ -43,6 +46,7 @@ export function activate(m: Match): void {
   sites = m.sites;
   siteAt = m.siteAt;
   crystalFields = m.crystalFields;
+  bridgeMap = m.bridges;
 }
 
 export function setWorld(w: World): void {

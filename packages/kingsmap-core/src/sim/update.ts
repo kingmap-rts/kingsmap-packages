@@ -40,7 +40,7 @@ import {
 } from './systems/combat';
 import { diploTick, hostile } from './systems/diplomacy';
 import { banditLoot, sendCaravan, wagonTick } from './systems/logistics';
-import { followPath, moveToward, turn } from './systems/movement';
+import { followPath, moveToward, turn, wade } from './systems/movement';
 import { recomputeNetwork } from './systems/network';
 import { findPath } from './systems/pathfinding';
 import { fireRainTick } from './systems/paths';
@@ -274,7 +274,9 @@ export function update(dt: number) {
       u.scan = 0.25 + rand() * 0.1;
       acquireTarget(u);
     }
-    let t = u.tgt ? G.byId.get(u.tgt) : null;
+    // left in the water by a fallen bridge: only wades ashore this tick
+    const wet = wade(u, SPD, dt);
+    let t = !wet && u.tgt ? G.byId.get(u.tgt) : null;
     if (t && t.dead) {
       t = null;
       u.tgt = 0;
@@ -312,7 +314,7 @@ export function update(dt: number) {
         u.tgt = 0;
         if (u.dest) u.path = findPath(u.x | 0, u.y | 0, u.dest[0], u.dest[1]);
       }
-    } else if (u.path && u.path.length) {
+    } else if (!wet && u.path && u.path.length) {
       // a group march: at the group's pace, so its units arrive together
       if (followPath(u, SPD * (u.order ? u.gsp : 1), dt)) {
         u.gsp = 1;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Lockstep, Terrain } from '@kingmap-rts/kingsmap-types';
 import { createGame, rules } from '../src/index';
+import { bridgeMap } from '../src/sim/state';
 
 describe('goodsTotal', () => {
   const bag = { wood: 1, ore: 2, steel: 3, food: 4, crystal: 5 };
@@ -70,9 +71,27 @@ describe('invariants over a 15-minute bot match', () => {
     const G = game.world;
     const { terrain } = game.map;
     const walkable = (t: number) => t === Terrain.Plain || t === Terrain.Forest;
+    // seconds each unit has stood in the water off a bridge (left there by a fallen one)
+    const wet = new Map<number, number>();
+    let bridged = 0;
     for (let i = 1; i <= 9000; i++) {
       if (i % 250 === 0) await new Promise(res => setImmediate(res));
       game.step();
+      for (const u of G.units) {
+        const k = (u.y | 0) * rules.MAP_W + (u.x | 0);
+        if (terrain[k] === Terrain.Mountain)
+          expect.fail(`unit ${u.id} on a mountain`);
+        if (walkable(terrain[k])) wet.delete(u.id);
+        else if (bridgeMap[k]) {
+          wet.delete(u.id);
+          bridged++;
+        } else {
+          // it wades ashore and never stays in the water for long
+          const s = (wet.get(u.id) ?? 0) + Lockstep.TickSeconds;
+          wet.set(u.id, s);
+          if (s >= 12) expect.fail(`unit ${u.id} in the water for ${s}s`);
+        }
+      }
       if (i % 300 !== 0) continue;
       for (const p of G.players) {
         for (const k of ['wood', 'ore', 'steel', 'food'] as const) {
@@ -85,13 +104,12 @@ describe('invariants over a 15-minute bot match', () => {
       }
       for (const u of G.units) {
         expect(u.hp).toBeLessThanOrEqual(u.maxhp + 1e-9);
-        expect(walkable(terrain[(u.y | 0) * rules.MAP_W + (u.x | 0)])).toBe(
-          true,
-        ); // never water/mountain
         expect(G.players[u.owner].alive).toBe(true);
       }
       for (const b of G.buildings)
         expect(walkable(terrain[b.y * rules.MAP_W + b.x])).toBe(true);
     }
+    // troops did cross water on bridges in this match
+    expect(bridged).toBeGreaterThan(0);
   });
 });

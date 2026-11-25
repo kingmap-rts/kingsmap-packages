@@ -26,7 +26,7 @@ import { dist, tileIndex, inBounds } from '../util/geometry';
 import { rand } from '../util/rng';
 import { addBuilding, addUnit, canHire, isDepot } from '../world/entities';
 import { logEvent, msg } from '../world/events';
-import { walkable } from '../world/terrain';
+import { dry } from '../world/terrain';
 
 export function canAfford(p: Player, c: Cost) {
   return (
@@ -50,7 +50,7 @@ export function buildCheck(
 ): GameMessage | null {
   if (!inBounds(x, y)) return msg('error.offMap');
   const k = tileIndex(x, y);
-  if (!walkable(x, y)) return msg('error.notBuildable');
+  if (!dry(x, y)) return msg('error.notBuildable');
   if (G.bAt[k] !== -1) return msg('error.tileTaken');
   if (siteAt[k] >= 0)
     return msg('error.siteHere', { site: sites[siteAt[k]].type });
@@ -154,7 +154,7 @@ export function train(
   for (const [dx, dy] of HIRE_SPOTS) {
     const x = d.x + dx;
     const y = d.y + dy;
-    if (walkable(x, y) && G.bAt[tileIndex(x, y)] === -1) {
+    if (dry(x, y) && G.bAt[tileIndex(x, y)] === -1) {
       pay(p, cost);
       p.pop -= S.pop || 1;
       p.stats.hired++;

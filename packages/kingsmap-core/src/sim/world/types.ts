@@ -28,4 +28,6 @@ export interface Match {
   /** site index on every tile (-1 = none) */
   siteAt: Int16Array;
   crystalFields: Tile[];
+  /** 1 on the water tiles a standing bridge covers (troops walk them), from the road network */
+  bridges: Uint8Array;
 }

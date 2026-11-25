@@ -267,3 +267,61 @@ export function walkTo(u: Unit, t: Unit) {
   u.end = null;
   u.gsp = 1;
 }
+
+/** a unit wades at this share of its pace */
+const WADE = 0.5;
+
+/** the walkable tile nearest to the point (x, y), looking up to 20 tiles out, or null */
+function shore(x: number, y: number): Tile | null {
+  const cx = x | 0;
+  const cy = y | 0;
+  let best: Tile | null = null;
+  let bd = 1e9;
+  let lastRing = 20;
+  for (let r = 1; r <= lastRing; r++) {
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        if (!walkable(cx + dx, cy + dy)) continue;
+        const d = dist(x, y, cx + dx + 0.5, cy + dy + 0.5);
+        if (d < bd) {
+          bd = d;
+          best = [cx + dx, cy + dy];
+        }
+      }
+    // a nearer tile can still sit in the next ring (a corner of this one is farther than its side)
+    if (best && lastRing > r + 1) lastRing = r + 1;
+  }
+  return best;
+}
+
+/**
+ * A unit left in the water (its bridge burnt or gone from under it) wades to the nearest shore at
+ * half its pace and does nothing else meanwhile: it neither drowns nor stays stuck. Once ashore it
+ * walks on to where it was going. Returns false when the unit stands on walkable ground.
+ */
+export function wade(u: Unit, speed: number, dt: number): boolean {
+  if (walkable(u.x | 0, u.y | 0)) return false;
+  const s = shore(u.x, u.y);
+  if (!s) return true;
+  const dx = s[0] + 0.5 - u.x;
+  const dy = s[1] + 0.5 - u.y;
+  const d = vecLen(dx, dy);
+  const st = Math.min(speed * WADE * dt, d);
+  if (d > 1e-4) {
+    u.x += (dx / d) * st;
+    u.y += (dy / d) * st;
+    u.ang = Math.atan2(dy, dx);
+    turn(u, dx / d, dy / d);
+  }
+  u.mv = 1;
+  // ashore: on to where it was going, if its way was lost in the water
+  if (
+    walkable(u.x | 0, u.y | 0) &&
+    !u.tgt &&
+    u.dest &&
+    !(u.path && u.path.length)
+  )
+    u.path = findPath(u.x | 0, u.y | 0, u.dest[0], u.dest[1]);
+  return true;
+}
