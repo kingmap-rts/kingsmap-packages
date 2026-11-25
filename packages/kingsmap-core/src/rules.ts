@@ -11,6 +11,8 @@ export { SEATS, TILE_PX, MAP_W, MAP_H, TILES, COLORS } from './sim/config/map';
 // ---- roads and territory ----
 export {
   ROAD_LEN,
+  ROAD_BETA,
+  ROAD_DETOUR,
   ROAD_PACE,
   HQ_RADIUS,
   POST_RADIUS,
@@ -102,7 +104,13 @@ export {
   bridgeTiles,
   type RoadPt,
 } from './sim/systems/roads';
-export { roadLandCut } from './sim/systems/network';
+// which pairs of a realm's posts get a road (KAN-54): the same rule the network is built by
+export {
+  roadLandCut,
+  roadPairs,
+  newPostRoads,
+  type RoadPost,
+} from './sim/systems/network';
 export { unitUnlocked } from './sim/modifiers';
 
 // ---- pure helpers ----
@@ -113,8 +121,6 @@ export { noiseHash, fbm } from './sim/util/noise';
 export {
   isDepot,
   canHire,
-  canHireHere,
-  canMuster,
   buildingIcon,
   centerX,
   centerY,

@@ -3,6 +3,21 @@ import type { UnitType } from '@kingmap-rts/kingsmap-types';
 
 export const ROAD_LEN = 9;
 
+/**
+ * Which posts in road range get a road (KAN-54): the road a–b is not built while another post of
+ * the same realm stands in the lune of a–b, the shape ROAD_BETA sets (lune-based β-skeleton). 1 is
+ * the Gabriel rule: no road a–b while a post c sees it at an obtuse angle (c inside the circle on
+ * a–b as its diameter), the way then runs a–c–b. 2 would be the stricter relative neighbourhood
+ * (no road a–b while a c is nearer both a and b than they are to each other). Between 1 and 2.
+ */
+export const ROAD_BETA = 1;
+
+/**
+ * A road whose route (around the mountains) is longer than this many times the straight line
+ * between its posts is not built (KAN-55's detours). Off (Infinity) until it is tuned.
+ */
+export const ROAD_DETOUR = Infinity;
+
 export const HQ_RADIUS = 8;
 
 export const POST_RADIUS = 6;

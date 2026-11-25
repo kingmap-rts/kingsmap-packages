@@ -13,6 +13,7 @@ import { convoyCap, hasPerk } from '../modifiers';
 import { G } from '../state';
 import { hostile } from './diplomacy';
 import { orderMove } from './movement';
+import { convoyRoute, routeLength } from './roadTravel';
 import { springTrap } from './sabotage';
 import { dist } from '../util/geometry';
 import { goodsTotal } from '../util/resources';
@@ -56,7 +57,9 @@ export function sendCaravan(b: Building) {
       }
       const cv = addConvoy(b, a.nb, cargo);
       cv.key = a.key;
-      cv.L0 = dist(b.x, b.y, a.nb.x, a.nb.y);
+      // the length of the road as it runs (around the mountains): the caravan drives all of it
+      const route = convoyRoute(cv, a.nb);
+      cv.L0 = route ? routeLength(route) : dist(b.x, b.y, a.nb.x, a.nb.y);
       springTrap(cv);
       G.linkFree.set(a.key, G.t + ROAD_GAP);
       b.idle = 0;

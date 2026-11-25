@@ -162,6 +162,7 @@ interface RoadCache {
   route: Map<string, RoadPt[]>;
   tiles: Map<string, Int32Array>;
   bridges: Map<string, Int32Array>;
+  lanes: Map<string, Float64Array>;
 }
 const caches = new WeakMap<object, RoadCache>();
 const cacheOf = (terrain: ArrayLike<number> & object) => {
@@ -169,7 +170,12 @@ const cacheOf = (terrain: ArrayLike<number> & object) => {
   if (!c)
     caches.set(
       terrain,
-      (c = { route: new Map(), tiles: new Map(), bridges: new Map() }),
+      (c = {
+        route: new Map(),
+        tiles: new Map(),
+        bridges: new Map(),
+        lanes: new Map(),
+      }),
     );
   return c;
 };
@@ -339,4 +345,44 @@ export function bridgeTiles(
   const tiles = Int32Array.from(out);
   c.set(key, tiles);
   return tiles;
+}
+
+/** how far a bridge's lane runs on past the bridge's end onto the land, tiles: troops line up on it */
+const LANDING = 0.8;
+
+/**
+ * The middle lines of the bridges of the road between the posts at tiles (ax, ay) and (bx, by):
+ * x0, y0, x1, y1 (tiles) for each stretch of bridgeSpans of the road's route, run on LANDING
+ * tiles onto the land at both ends (never past the route's own ends). Troops on a bridge walk its
+ * middle line in single file. Empty when the road crosses no water. Do not change the returned array.
+ */
+export function bridgeLanes(
+  terrain: ArrayLike<number> & object,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): Float64Array {
+  const c = cacheOf(terrain).lanes;
+  const key = `${ax},${ay}>${bx},${by}`;
+  const hit = c.get(key);
+  if (hit) return hit;
+  const pts = roadRoute(terrain, [ax + 0.5, ay + 0.5], [bx + 0.5, by + 0.5]);
+  const out: number[] = [];
+  for (let s = 1; s < pts.length; s++) {
+    const p = pts[s - 1];
+    const q = pts[s];
+    const dx = q[0] - p[0];
+    const dy = q[1] - p[1];
+    const len = vecLen(dx, dy);
+    if (!len) continue;
+    for (const [u0, u1] of bridgeSpans(terrain, p, q)) {
+      const a = Math.max(0, u0 - LANDING / len);
+      const b = Math.min(1, u1 + LANDING / len);
+      out.push(p[0] + dx * a, p[1] + dy * a, p[0] + dx * b, p[1] + dy * b);
+    }
+  }
+  const lanes = Float64Array.from(out);
+  c.set(key, lanes);
+  return lanes;
 }

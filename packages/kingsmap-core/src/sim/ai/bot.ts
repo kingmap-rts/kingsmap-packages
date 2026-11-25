@@ -6,7 +6,7 @@ import type {
   Unit,
   UnitType,
 } from '../world/types';
-import { campaign } from './campaign';
+import { campaign, standsAt } from './campaign';
 import { botDiplomacy } from './diplomacy';
 import { botMarket } from './market';
 import { botPaths } from './paths';
@@ -25,10 +25,10 @@ import { Deposit, Terrain } from '../config/map';
 import { POST_RADIUS, ROAD_LEN } from '../config/network';
 import { PATHS } from '../config/paths';
 import { UNITS } from '../config/units';
-import { hasPerk, unitCost, unitUnlocked } from '../modifiers';
-import { MILITIA_STEEL_MARGIN } from '../config/economy';
+import { unitCost, unitUnlocked } from '../modifiers';
 import { G, depositMap, sites, terrainMap } from '../state';
 import { hostile } from '../systems/diplomacy';
+import { newPostRoads } from '../systems/network';
 import { orderAttack, orderMove } from '../systems/movement';
 import { soldierCount } from '../systems/squads';
 import { dist, tileIndex, detCos, detSin, inBounds } from '../util/geometry';
@@ -170,9 +170,8 @@ export function botTick(p: Player) {
             else if (terrainMap[k] === Terrain.Forest) sc += 0.25;
           }
         }
-      // prefer making loops: bonus for each linked depot within link range
-      let nl = 0;
-      for (const d of deps) if (dist(d.x, d.y, x, y) <= ROAD_LEN) nl++;
+      // prefer making loops: bonus for each road to a linked depot the post would get (KAN-54)
+      const nl = newPostRoads(deps, x, y, ROAD_LEN).length;
       sc += Math.min(nl, 3) * 0.6;
       for (const st of sites)
         if (st.owner !== p.id && dist(st.x, st.y, x, y) <= POST_RADIUS - 0.5)
@@ -193,10 +192,6 @@ export function botTick(p: Player) {
   const hireAt = [p.hq, ...deps.filter(b => b.spec === 'barracks')].reduce(
     (a, c) => (toFoe(c) < toFoe(a) ? c : a),
   );
-  // with `levies` any post hires militia: the one nearest the foe
-  const militiaAt = hasPerk(p, 'levies')
-    ? [p.hq, ...deps].reduce((a, c) => (toFoe(c) < toFoe(a) ? c : a))
-    : hireAt;
   for (let n = 0; n < 2 && soldierCount(army) < cap; n++) {
     const nW = soldierCount(army.filter(u => u.type === 'wagon'));
     const nS = soldierCount(army.filter(u => u.type === 'siege'));
@@ -222,7 +217,7 @@ export function botTick(p: Player) {
     // builders only while one of our roads burns, arsonists only once there is an enemy network to burn
     const uu = p.doc ? PATHS[p.doc].unit : undefined;
     if (uu && unitUnlocked(p, uu) && type !== 'wagon' && rand() < 0.22) {
-      const lim = uu === 'golem' ? 4 : 3;
+      const lim = uu === 'militia' ? 14 : uu === 'golem' ? 4 : 3;
       const useful =
         uu === 'builder'
           ? G.links.some(l => l.owner === p.id && (G.sab.get(l.key) || 0) > G.t)
@@ -237,22 +232,15 @@ export function botTick(p: Player) {
       )
         type = uu;
     }
-    // short of steel for a soldier: a militiaman, who needs none
-    if (
-      (type === 'inf' || type === 'raid') &&
-      p.res.steel < UNITS.inf.steel + MILITIA_STEEL_MARGIN
-    )
-      type = 'militia';
     if (
       p.res.food < 14 ||
-      (UNITS[type].steel > 0 &&
-        p.res.steel < UNITS[type].steel + (wantSpec && !acted ? 28 : 6)) ||
+      p.res.steel < UNITS[type].steel + (wantSpec && !acted ? 28 : 6) ||
       !canAfford(p, unitCost(p, type))
     )
       break;
     if (p.pop < 1 || p.pop - 1 < p.labor * (p.ai.alert > G.t ? 0.3 : P.labor))
       break;
-    const u = train(p, type, type === 'militia' ? militiaAt : hireAt);
+    const u = train(p, type, hireAt);
     if (!('key' in u)) army.push(u);
   }
   // 4. military
@@ -286,7 +274,16 @@ export function botTick(p: Player) {
   }
   if (threat) p.ai.alert = G.t + 15;
   if (threat) {
-    const def = idle.filter(u => dist(u.x, u.y, threat.x, threat.y) < 24);
+    const near = idle.filter(u => dist(u.x, u.y, threat.x, threat.y) < 24);
+    // the ones already standing round the threat stay where they are (KAN-57)
+    const def = near.filter(
+      u => !standsAt(u, threat.x | 0, threat.y | 0, near.length),
+    );
+    for (const u of near)
+      if (!def.includes(u)) {
+        u.job = 'def';
+        u.jobUntil = G.t + 7;
+      }
     if (def.length) {
       orderMove(def, threat.x | 0, threat.y | 0);
       for (const u of def) {

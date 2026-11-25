@@ -1,6 +1,6 @@
 /** One simulation tick: every system in a fixed order. */
 import { Color } from '@kingmap-rts/kingsmap-types';
-import type { Building, Unit, UnitType } from './world/types';
+import type { Building, Unit } from './world/types';
 import { botTick } from './ai/bot';
 import { canAfford, train } from './commands/build';
 import {
@@ -8,7 +8,6 @@ import {
   FOOD_PER_PERSON,
   FORGE_RATE,
   HQ_FORGE,
-  MILITIA_STEEL_MARGIN,
   RESOURCES,
   STOCK_CAP,
   STORE_BASE,
@@ -43,6 +42,8 @@ import {
 } from './systems/combat';
 import { diploTick, hostile } from './systems/diplomacy';
 import { banditLoot, sendCaravan, wagonTick } from './systems/logistics';
+import { convoyRoute, routeLeft, stepAlong } from './systems/roadTravel';
+import { keepOnBridges, passOnBridge } from './systems/bridges';
 import { followPath, moveToward, turn, wade } from './systems/movement';
 import { recomputeNetwork } from './systems/network';
 import { findPath } from './systems/pathfinding';
@@ -234,14 +235,23 @@ export function update(dt: number) {
     }
     const tx = nb.x + 0.5;
     const ty = nb.y + 0.5;
-    const d = dist(c.x, c.y, tx, ty);
+    // a caravan on a road drives the road as it runs (around the mountains) at a steady pace
+    const route = convoyRoute(c, nb);
+    const d = route ? routeLeft(route, c.x, c.y) : dist(c.x, c.y, tx, ty);
     const st = CONVOY_SPEED * convoySpeed(c) * dt;
     if (c.doom && d < c.L0! * 0.5) {
       G.fx.push({ x: c.x, y: c.y, t: 0, dur: 0.8, r: 1, color: Color.Blast });
       kill(c, false, c.doom - 1);
       continue;
     }
-    if (d > st) {
+    if (route) {
+      const at = stepAlong(route, c.x, c.y, st);
+      if (at) {
+        c.x = at[0];
+        c.y = at[1];
+        continue;
+      }
+    } else if (d > st) {
       c.x += ((tx - c.x) / d) * st;
       c.y += ((ty - c.y) / d) * st;
       continue;
@@ -285,16 +295,10 @@ export function update(dt: number) {
     p.autoT = (p.autoT || 0) - dt;
     if (p.autoT > 0) continue;
     p.autoT = 1;
-    // short of steel: a militiaman, who needs none; else a man-at-arms or a raider
-    const type: UnitType =
-      p.res.steel < UNITS.inf.steel + MILITIA_STEEL_MARGIN
-        ? 'militia'
-        : rand() < 0.3
-          ? 'raid'
-          : 'inf';
+    const type = rand() < 0.3 ? 'raid' : 'inf';
     if (
       p.res.food >= UNITS[type].food + 12 &&
-      (type === 'militia' || p.res.steel >= UNITS[type].steel + 8) &&
+      p.res.steel >= UNITS[type].steel + 8 &&
       p.pop - 1 >= p.labor * 0.8 &&
       canAfford(p, UNITS[type])
     ) {
@@ -418,6 +422,7 @@ export function update(dt: number) {
     }
   }
   separate();
+  keepOnBridges();
   for (const s of G.shots) s.t -= dt;
   G.shots = G.shots.filter(s => s.t > 0);
   for (const f of G.fx) f.t += dt;
@@ -564,7 +569,7 @@ function separate() {
     near.sort((p, q) => p - q);
     for (const j of near) {
       const b = us[j];
-      if (b.dead) continue;
+      if (b.dead || passOnBridge(a, b)) continue;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const rr = bodyR(a) + bodyR(b);

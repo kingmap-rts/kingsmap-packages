@@ -45,17 +45,6 @@ export const burnTime = (att: Player, def: Player) =>
   (hasPerk(att, 'burn60') ? 60 : BURN_TIME) *
   (hasPerk(def, 'repair') ? 0.5 : 1);
 
-/** `levies` (the land's third node): its militia take this much more hp and deal this much more damage */
-export const LEVIES_HP = 1.25;
-export const LEVIES_DMG = 1;
-
-/** a unit's damage per blow before its target and its state: the militia of `levies` hit harder */
-export const unitDmg = (u: Unit) =>
-  UNITS[u.type].dmg +
-  (u.type === 'militia' && hasPerk(G.players[u.owner], 'levies')
-    ? LEVIES_DMG
-    : 0);
-
 export const forgeBonus = (p: Player) => (hasPerk(p, 'bellows') ? 1.6 : 1);
 
 export const yieldBonus = (p: Player, k: Resource) =>

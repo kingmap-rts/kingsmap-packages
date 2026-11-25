@@ -1,5 +1,6 @@
 /** Road network: links between posts, cut roads, territory, population capacity and supply. */
-import type { Building } from '../world/types';
+import type { PreviewRoad, RoadPreview } from '@kingmap-rts/kingsmap-types';
+import type { Building, Player } from '../world/types';
 import { SITE_TYPES } from '../config/buildings';
 import {
   RESOURCES,
@@ -11,7 +12,7 @@ import {
   YIELD_PLAIN,
 } from '../config/economy';
 import { Deposit, MAP_H, MAP_W, SEATS, TILES, Terrain } from '../config/map';
-import { HQ_RADIUS } from '../config/network';
+import { HQ_RADIUS, ROAD_BETA, ROAD_DETOUR } from '../config/network';
 import { WAGON_R } from '../config/units';
 import { claimRadius, hasPerk, roadLength, siteWorkers } from '../modifiers';
 import { G, matchState, depositMap, sites, terrainMap } from '../state';
@@ -19,7 +20,8 @@ import { updateBridges } from './bridges';
 import { updateRoads } from './roadways';
 import { captureTick } from './capture';
 import { hostile, supplyDeps } from './diplomacy';
-import { roadTiles } from './roads';
+import { roadRoute, roadTiles } from './roads';
+import { routeLength } from './roadTravel';
 import { builderTick, sabotageTick } from './sabotage';
 import { dist, tileIndex, segmentDist } from '../util/geometry';
 import { isDepot, linkKey } from '../world/entities';
@@ -211,6 +213,150 @@ function linkFromCastle(ds: Building[], ward: boolean) {
       }
 }
 
+/** a post as the road rule sees it: tiles */
+export interface RoadPost {
+  id: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Could a road run between posts a and b at all: in range (straight line ≤ R) and, with ROAD_DETOUR
+ * on, its route around the mountains no longer than ROAD_DETOUR times the straight line.
+ */
+function roadPossible(a: RoadPost, b: RoadPost, R: number): boolean {
+  const d2 = (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+  if (d2 > R * R) return false;
+  if (ROAD_DETOUR === Infinity) return true;
+  const route = roadRoute(
+    terrainMap,
+    [a.x + 0.5, a.y + 0.5],
+    [b.x + 0.5, b.y + 0.5],
+  );
+  return routeLength(route) <= ROAD_DETOUR * Math.sqrt(d2);
+}
+
+/**
+ * Does post c stand in the lune of the road a–b (ROAD_BETA; 1: inside the circle on a–b as its
+ * diameter, or on it)? Only +, -, * on whole tiles and halves: exact, the same in every JS engine.
+ */
+function inLune(a: RoadPost, b: RoadPost, c: RoadPost): boolean {
+  const ex = b.x - a.x;
+  const ey = b.y - a.y;
+  const h = ROAD_BETA / 2;
+  const r2 = h * h * (ex * ex + ey * ey);
+  // the two centres: a + h·(b − a) and b − h·(b − a)
+  const d1 = (c.x - a.x - h * ex) ** 2 + (c.y - a.y - h * ey) ** 2;
+  const d2 = (c.x - b.x + h * ex) ** 2 + (c.y - b.y + h * ey) ** 2;
+  // on the edge counts as inside: four posts on one circle would otherwise keep both (crossing)
+  // diagonals. Not at β = 2, where it would take all three sides of an equilateral triangle; below
+  // 2 a post on the edge is still nearer both ends than they are to each other, so no post is lost
+  const edge = ROAD_BETA < 2;
+  return (d1 < r2 || (edge && d1 === r2)) && (d2 < r2 || (edge && d2 === r2));
+}
+
+/**
+ * The roads of one realm (KAN-54): which pairs of its posts get a road, as index pairs [i, j],
+ * i < j, in that order. The one source of truth for the network and for the build preview.
+ *  1. candidates: the pairs a road could join (roadPossible: in range R, no too long detour);
+ *  2. the road a–b is not built while a post c stands in its lune (ROAD_BETA) and the roads a–c
+ *     and c–b are candidates themselves: then the way runs a–c–b. So the rule never cuts a post
+ *     off that a road could reach (the shortest road out of a post always stays), and the roads
+ *     never cross. A pure function of the posts (and the terrain with ROAD_DETOUR on).
+ */
+export function roadPairs(
+  posts: readonly RoadPost[],
+  R: number,
+): [number, number][] {
+  const n = posts.length;
+  const ok = new Uint8Array(n * n);
+  const near: number[][] = Array.from({ length: n }, () => []);
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++)
+      if (roadPossible(posts[i], posts[j], R)) {
+        ok[i * n + j] = ok[j * n + i] = 1;
+        near[i].push(j);
+        near[j].push(i);
+      }
+  const out: [number, number][] = [];
+  for (let i = 0; i < n; i++)
+    for (const j of near[i]) {
+      if (j < i) continue;
+      let keep = true;
+      for (const k of near[i])
+        if (k !== j && ok[j * n + k] && inLune(posts[i], posts[j], posts[k])) {
+          keep = false;
+          break;
+        }
+      if (keep) out.push([i, j]);
+    }
+  out.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  return out;
+}
+
+/**
+ * The posts of `posts` a new post at (x, y) would get a road to (indices), by roadPairs' rule.
+ * Cheaper than roadPairs over all the posts: for the bot weighing places for a post.
+ */
+export function newPostRoads(
+  posts: readonly RoadPost[],
+  x: number,
+  y: number,
+  R: number,
+): number[] {
+  const p: RoadPost = { id: -1, x, y };
+  const near: number[] = [];
+  for (let i = 0; i < posts.length; i++)
+    if (roadPossible(p, posts[i], R)) near.push(i);
+  return near.filter(
+    j =>
+      !near.some(
+        k =>
+          k !== j &&
+          roadPossible(posts[j], posts[k], R) &&
+          inLune(p, posts[j], posts[k]),
+      ),
+  );
+}
+
+/**
+ * The roads a new post of `p` at (x, y) would get and the roads it would take away (a road a–b
+ * goes when the new post stands in its lune), by the same roadPairs as the network. Changes
+ * nothing. Whether the post may stand there is buildCheck's business.
+ */
+export function roadPreview(p: Player, x: number, y: number): RoadPreview {
+  const ds = G.buildings.filter(b => !b.dead && b.owner === p.id && isDepot(b));
+  const R = roadLength(p);
+  const before = roadPairs(ds, R);
+  const n = ds.length;
+  const after = roadPairs([...ds, { id: -1, x, y }], R);
+  const kept = new Set<number>();
+  const add: PreviewRoad[] = [];
+  for (const [i, j] of after) {
+    if (j !== n) {
+      kept.add(i * n + j);
+      continue;
+    }
+    const b = ds[i];
+    const tiles = roadTiles(terrainMap, x, y, b.x, b.y);
+    let cut = -1;
+    for (let t = 0; t < tiles.length && cut < 0; t++) {
+      const o = G.own[tiles[t]];
+      if (o >= 0 && hostile(p.id, o)) cut = o;
+    }
+    add.push({
+      a: -1,
+      b: b.id,
+      route: roadRoute(terrainMap, [x + 0.5, y + 0.5], [b.x + 0.5, b.y + 0.5]),
+      cut,
+    });
+  }
+  const drop = before
+    .filter(([i, j]) => !kept.has(i * n + j))
+    .map(([i, j]) => ({ a: ds[i].id, b: ds[j].id }));
+  return { add, drop };
+}
+
 export function recomputeNetwork() {
   captureTick(0.4);
   sabotageTick(0.4);
@@ -233,28 +379,26 @@ export function recomputeNetwork() {
   for (const p of G.players) {
     if (!p.alive) continue;
     const ds = deps[p.id];
-    for (let i = 0; i < ds.length; i++)
-      for (let j = i + 1; j < ds.length; j++) {
-        const a = ds[i];
-        const b = ds[j];
-        if (dist(a.x, a.y, b.x, b.y) <= roadLength(p)) {
-          const key = linkKey(a, b);
-          // a road ward or a king's highway cannot be cut
-          const safe = p.wardUntil > G.t || (G.royal.get(key) || 0) > G.t;
-          const cut = safe ? null : linkBlocked(a, b, p.id);
-          const bl = cut ? cut.blocked : false;
-          if (cut && cut.blocked) {
-            p.stats.cutSuffer += 0.4;
-            if (cut.by >= 0) G.players[cut.by].stats.cutInflict += 0.4;
-          }
-          G.links.push({ a, b, owner: p.id, blocked: bl, key });
-          guarded.push(safe);
-          if (!bl) {
-            a.adj.push({ nb: b, key });
-            b.adj.push({ nb: a, key });
-          }
-        }
+    // the roads by the road rule (KAN-54), in the order the pairs come
+    for (const [i, j] of roadPairs(ds, roadLength(p))) {
+      const a = ds[i];
+      const b = ds[j];
+      const key = linkKey(a, b);
+      // a road ward or a king's highway cannot be cut
+      const safe = p.wardUntil > G.t || (G.royal.get(key) || 0) > G.t;
+      const cut = safe ? null : linkBlocked(a, b, p.id);
+      const bl = cut ? cut.blocked : false;
+      if (cut && cut.blocked) {
+        p.stats.cutSuffer += 0.4;
+        if (cut.by >= 0) G.players[cut.by].stats.cutInflict += 0.4;
       }
+      G.links.push({ a, b, owner: p.id, blocked: bl, key });
+      guarded.push(safe);
+      if (!bl) {
+        a.adj.push({ nb: b, key });
+        b.adj.push({ nb: a, key });
+      }
+    }
     linkFromCastle(ds, p.wardUntil > G.t);
   }
   // second pass: a road through a hostile kingdom's land is cut too. The land is the one these

@@ -16,6 +16,7 @@ export type * from './game/world';
 export type * from './game/rules';
 export type * from './game/match';
 export type * from './game/ledger';
+export type * from './game/roads';
 export type * from './net/messages';
 export type * from './net/stats';
 export type * from './api/http';

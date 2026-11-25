@@ -56,11 +56,11 @@ export const STORE_PER_DEPOT = 60;
 /** ore a forge post turns into steel, a second */
 export const FORGE_RATE = 1.2;
 
-/** ore the castle turns into steel, a second: slower than a forge, so forges are worth building */
-export const HQ_FORGE = 0.5;
-
-/** hire a militiaman instead of a man-at-arms while steel is below his price plus this */
-export const MILITIA_STEEL_MARGIN = 12;
+/**
+ * ore the castle turns into steel, a second: it holds one forge of its own, as fast as a forge post
+ * (the castle makes no steel from nothing; forge posts add to this, where the ore is dug)
+ */
+export const HQ_FORGE = FORGE_RATE;
 
 // ---- market at the castle: 30 of one resource for 10 of another (mana is not traded) ----
 export const MARKET_GIVE = 30;

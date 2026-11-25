@@ -15,7 +15,6 @@ import { rand } from '../util/rng';
 import { lootCarried, centerX, centerY } from '../world/entities';
 import { logEvent, msg, notify } from '../world/events';
 import { gain } from '../ledger';
-import { unitDmg } from '../modifiers';
 
 export function kill(e: Entity, silent?: boolean, by?: number) {
   if (e.dead) return;
@@ -521,7 +520,7 @@ export function blowBonus(u: Unit, t: Unit) {
 export function fire(u: Unit, t: Entity, mult = 1) {
   const S = UNITS[u.type];
   if (!S.dmg) return;
-  let dmg = unitDmg(u) * strikers(u) * (u.supplied ? 1 : 0.6) * mult;
+  let dmg = S.dmg * strikers(u) * (u.supplied ? 1 : 0.6) * mult;
   if (t.kind === 'u' && melee(u) && t.type !== 'wagon')
     dmg *= MELEE_PACE * blowBonus(u, t);
   u.chg = 0;

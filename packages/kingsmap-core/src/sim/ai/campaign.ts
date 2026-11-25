@@ -19,6 +19,22 @@ export function groupCentre(g: Unit[]) {
   return [x / g.length, y / g.length];
 }
 
+/**
+ * u stands at its place in the ranks of an earlier order to the point (x, y) (a tile) given to a
+ * group of `n` units: a new order to the same point would only shuffle the ranks, so the bot does
+ * not give it again (KAN-57)
+ */
+export function standsAt(u: Unit, x: number, y: number, n: number) {
+  if (!u.end || u.tgt || (u.path && u.path.length)) return false;
+  // the ranks of a group spread this far from the point it is sent to (and a little more where a
+  // place falls on a mountain and moves to the nearest free tile)
+  const r = 3 + Math.sqrt(n * 2) * 0.8;
+  return (
+    dist(u.end[0], u.end[1], x + 0.5, y + 0.5) <= r &&
+    dist(u.x, u.y, u.end[0], u.end[1]) < 1.5
+  );
+}
+
 export function pickFoe(p: Player, army: Unit[], enemies: Player[]) {
   const myStr = soldierCount(army.filter(u => u.type !== 'wagon')) + 1;
   let best = null;
@@ -177,7 +193,10 @@ export function campaign(
     }
     if (tb.type === 'hq') p.stats.hqTargets++;
     p.stats.waveDist += dist(tb.x, tb.y, p.hq.x, p.hq.y);
-    const free = group.filter(u => !u.tgt);
+    // (the ranks already standing round it, when the same objective is picked again, stay put)
+    const free = group.filter(
+      u => !u.tgt && !standsAt(u, tb!.x, tb!.y, group.length),
+    );
     orderMove(free, tb.x, tb.y);
     for (const u of free) {
       u.job = 'push';
@@ -192,11 +211,13 @@ export function campaign(
       ai.gProgT = G.t;
       ai.gLast = [cx, cy];
     }
+    // stragglers (not the ranks already standing round the objective) go to it again
     const lag = group.filter(
       u =>
         !u.tgt &&
         (!u.path || !u.path.length) &&
-        dist(u.x, u.y, tb!.x, tb!.y) > 3,
+        dist(u.x, u.y, tb!.x, tb!.y) > 3 &&
+        !standsAt(u, tb!.x, tb!.y, group.length),
     );
     if (lag.length) {
       orderMove(lag, tb.x, tb.y);

@@ -2,9 +2,11 @@
 import type { Building, Entity, Tile, Unit } from '../world/types';
 import { MAP_H, MAP_W } from '../config/map';
 import { UNITS } from '../config/units';
-import { partingBlows } from './combat';
+import { G } from '../state';
+import { onLane, overWater } from './bridges';
+import { bodiesNear, bodyR, partingBlows } from './combat';
 import { findPath } from './pathfinding';
-import { dist, tileIndex, vecLen } from '../util/geometry';
+import { dist, segmentDist, tileIndex, vecLen } from '../util/geometry';
 import { paceAt, walkable } from '../world/terrain';
 
 export function moveToward(
@@ -58,6 +60,31 @@ export function turn(u: Unit, dx: number, dy: number) {
 const ARRIVE = 0.25;
 const END = 0.06;
 
+/** this close to its place in the ranks, a unit that a mate standing still bars from it stops, tiles */
+const CROWD_END = 0.6;
+
+/**
+ * a mate of u standing still (arrived, not fighting) is in u's way to the point (x, y) where u is to
+ * stop: u stops short instead of shoving it aside tick after tick (a crowd pushing to its exact
+ * places in a narrow spot shakes) (KAN-57)
+ */
+function blocked(u: Unit, x: number, y: number) {
+  // (a soldier on its way to merge with its squad squeezes on through)
+  if (u.joinTo) return false;
+  const d = dist(u.x, u.y, x, y);
+  for (const j of bodiesNear(u.x, u.y)) {
+    const o = G.units[j];
+    if (o === u || o.dead || o.owner !== u.owner || o.tgt) continue;
+    if (o.path && o.path.length) continue;
+    const rr = bodyR(o) + bodyR(u);
+    const od = dist(o.x, o.y, x, y);
+    // on u's place, or ahead of u on its way there
+    if (od < rr) return true;
+    if (od < d && segmentDist(o.x, o.y, u.x, u.y, x, y) < rr) return true;
+  }
+  return false;
+}
+
 export function followPath(e: Unit, speed: number, dt: number) {
   const p = e.path;
   if (!p || !p.length) return true;
@@ -72,9 +99,16 @@ export function followPath(e: Unit, speed: number, dt: number) {
   // a group march ends at the unit's exact place in the ranks, not at its tile's centre
   const exact =
     p.length === 1 && !!e.end && walkable(e.end[0] | 0, e.end[1] | 0);
-  const tx = exact ? e.end![0] : wx + 0.5;
-  const ty = exact ? e.end![1] : wy + 0.5;
-  if (p.length === 1 && dist(e.x, e.y, tx, ty) < (exact ? END : ARRIVE)) {
+  let tx = exact ? e.end![0] : wx + 0.5;
+  let ty = exact ? e.end![1] : wy + 0.5;
+  // on a bridge (or by its end) troops walk its middle line in single file
+  const lane = exact ? null : onLane(tx, ty);
+  if (lane) [tx, ty] = lane;
+  if (
+    p.length === 1 &&
+    (dist(e.x, e.y, tx, ty) < (exact ? END : ARRIVE) ||
+      (exact && dist(e.x, e.y, tx, ty) < CROWD_END && blocked(e, tx, ty)))
+  ) {
     p.shift();
     return true;
   }
@@ -102,6 +136,9 @@ export const SPIRAL = (() => {
 
 /** room between neighbouring squads in a marching group's ranks, tiles (a squad is 1 tile wide) */
 const RANK = 1.4;
+
+/** a unit standing this near its place in the ranks counts as standing in them, tiles */
+const SETTLED = 1.2;
 
 /** the slowest pace a unit is held back to on a group march, a share of its speed */
 const MIN_PACE = 0.35;
@@ -155,33 +192,79 @@ export function orderMove(
   cy /= n;
   const px = tx + 0.5;
   const py = ty + 0.5;
-  // the way the group goes; a group ordered onto its own spot keeps the first unit's facing
+  const cols = n <= 3 ? n : Math.ceil(Math.sqrt(n * 2));
+  // the way the group goes; a group ordered onto the spot it already stands on (its ranks reach
+  // back from the front this far) keeps the way it faces, so its ranks are laid out as they stand
+  // and nobody swaps places (KAN-57)
   let dx = px - cx;
   let dy = py - cy;
   const dl = vecLen(dx, dy);
-  if (dl < 0.5) {
-    dx = units[0].hx;
-    dy = units[0].hy;
+  const onSpot = dl < 0.5 + ((Math.ceil(n / cols) - 1) * RANK) / 2;
+  if (onSpot) {
+    dx = 0;
+    dy = 0;
+    for (const u of units) {
+      dx += u.hx;
+      dy += u.hy;
+    }
+    const hl = vecLen(dx, dy);
+    if (hl > 1e-3) {
+      dx /= hl;
+      dy /= hl;
+    } else {
+      dx = units[0].hx;
+      dy = units[0].hy;
+    }
   } else {
     dx /= dl;
     dy /= dl;
   }
+  // the whole group already stands in its ranks round this spot: the order changes nothing, so
+  // nobody is shuffled to a new place
+  const reach = 3 + Math.sqrt(n * 2) * 0.8;
+  if (
+    onSpot &&
+    units.every(
+      u =>
+        !u.tgt &&
+        !(u.path && u.path.length) &&
+        !!u.end &&
+        dist(u.x, u.y, u.end[0], u.end[1]) < SETTLED &&
+        dist(u.end[0], u.end[1], px, py) <= reach,
+    )
+  ) {
+    for (const u of units) {
+      u.path = null;
+      u.gsp = 1;
+      u.ftgt = 0;
+      u.slot = -1;
+      u.chg = 0;
+      u.chT = 0;
+      u.capB = 0;
+      u.job = null;
+      u.joinTo = 0;
+      u.order = mode || 'amove';
+    }
+    return;
+  }
   // across the way (to the right of a unit walking along it)
   const ax = -dy;
   const ay = dx;
-  const cols = n <= 3 ? n : Math.ceil(Math.sqrt(n * 2));
   // the units nearest to the target make the front rank; in a rank, left to right
   const along = (u: Unit) => (u.x - cx) * dx + (u.y - cy) * dy;
   const side = (u: Unit) => (u.x - cx) * ax + (u.y - cy) * ay;
   const sorted = [...units].sort((a, b) => along(b) - along(a) || a.id - b.id);
   const taken = new Set<number>();
   const plan: { u: Unit; end: Tile; path: Tile[] | null; time: number }[] = [];
+  // a group ordered onto its own spot: each place goes to the unit standing nearest to it, so units
+  // already in their places stay put (KAN-57)
+  const free = onSpot ? [...units].sort((a, b) => a.id - b.id) : [];
   for (let r = 0; r * cols < n; r++) {
     const rank = sorted
       .slice(r * cols, r * cols + cols)
       .sort((a, b) => side(a) - side(b) || a.id - b.id);
     for (let c = 0; c < rank.length; c++) {
-      const u = rank[c];
+      let u = rank[c];
       const lat = (c - (rank.length - 1) / 2) * RANK;
       let ex = px + ax * lat - dx * r * RANK;
       let ey = py + ay * lat - dy * r * RANK;
@@ -204,7 +287,19 @@ export function orderMove(
         }
       }
       taken.add(tileIndex(gx, gy));
-      const end: Tile = exact ? [ex, ey] : [gx + 0.5, gy + 0.5];
+      let end: Tile = exact ? [ex, ey] : [gx + 0.5, gy + 0.5];
+      // a place over a bridge's water: on its middle line
+      if (overWater(end[0], end[1])) end = onLane(end[0], end[1]) || end;
+      if (onSpot) {
+        let k = 0;
+        for (let i = 1; i < free.length; i++)
+          if (
+            dist(free[i].x, free[i].y, end[0], end[1]) <
+            dist(free[k].x, free[k].y, end[0], end[1])
+          )
+            k = i;
+        u = free.splice(k, 1)[0];
+      }
       const path = findPath(u.x | 0, u.y | 0, gx, gy);
       plan.push({
         u,

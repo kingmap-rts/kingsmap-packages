@@ -29,7 +29,7 @@ import { capturable } from '../systems/combat';
 import { canCapture } from '../systems/capture';
 import { cast, choosePath, pickPerk } from '../systems/paths';
 import { formSquads, unsquad } from '../systems/squads';
-import { canMuster } from '../world/entities';
+import { canHire } from '../world/entities';
 import { msg, notifyAll } from '../world/events';
 
 /** Apply one intent of a seat. Returns a message for the player when it was refused, else null. */
@@ -110,7 +110,7 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       );
     case 'spawn': {
       const b = G.byId.get(c.b);
-      if (b && !b.dead && b.owner === seat && b.kind === 'b' && canMuster(b))
+      if (b && !b.dead && b.owner === seat && b.kind === 'b' && canHire(b))
         p.spawn = b.id;
       return null;
     }

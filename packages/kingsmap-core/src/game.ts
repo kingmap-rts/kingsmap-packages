@@ -7,6 +7,7 @@ import {
   type GameMessage,
   type Intent,
   type ResourceLedger,
+  type RoadPreview,
 } from '@kingmap-rts/kingsmap-types';
 import { DEFAULT_BOT_PARAMS } from './sim/config/ai';
 import { MAP_H, MAP_W } from './sim/config/map';
@@ -16,6 +17,7 @@ import { stateHash } from './sim/hash';
 import { readLedger, reconcile, startLedger } from './sim/ledger';
 import { activate, matchState } from './sim/state';
 import { allied, allyIds, hostile, pactOf } from './sim/systems/diplomacy';
+import { roadPreview } from './sim/systems/network';
 import { update } from './sim/update';
 import { nearestLinkedDepot } from './sim/world/entities';
 import { newGame } from './sim/world/new-game';
@@ -120,6 +122,18 @@ export class Game {
   buildError(seat: number, x: number, y: number): GameMessage | null {
     this.use();
     return buildCheck(this.match.world.players[seat], 'depot', x, y);
+  }
+
+  /**
+   * The roads a new trading post of this seat on this tile would get and the ones it would take
+   * away (KAN-56), by the same rule the network is built by; null when the post may not stand
+   * there (see buildError). Changes nothing.
+   */
+  roadPreview(seat: number, x: number, y: number): RoadPreview | null {
+    this.use();
+    const p = this.match.world.players[seat];
+    if (buildCheck(p, 'depot', x, y)) return null;
+    return roadPreview(p, x, y);
   }
 
   allied(a: number, b: number): boolean {
