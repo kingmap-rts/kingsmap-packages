@@ -136,6 +136,8 @@ export interface Building extends EntityBase {
   panicUntil?: number;
   /** extra claim radius from a land charter */
   rBonus?: number;
+  /** archers on a fort or the castle, 1 to 3: the first comes with it, the others are added (arm) */
+  arch?: number;
 }
 
 export interface Convoy extends EntityBase {

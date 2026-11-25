@@ -9,6 +9,12 @@ export const POST_RADIUS = 6;
 
 export const ROAD_GAP = 0;
 
+/**
+ * how much faster troops walk on a road (its bridges too) than on open ground: a share of their
+ * pace on every tile under a standing road, whoever owns it (a forest under the road counts as road)
+ */
+export const ROAD_PACE = 1.4;
+
 /** seconds a cut-off post holds out while only enemy troops (any of them) stand next to it */
 export const CAPTURE_TIME = 4;
 

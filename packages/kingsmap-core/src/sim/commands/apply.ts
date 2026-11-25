@@ -11,7 +11,7 @@ import type {
   Unit,
 } from '../world/types';
 import type { GiftResource, Intent } from '@kingmap-rts/kingsmap-types';
-import { build, specialize, train } from './build';
+import { arm, build, specialize, train } from './build';
 import { UNITS } from '../config/units';
 import { G } from '../state';
 import {
@@ -43,10 +43,20 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       .filter(
         (u): u is Unit => !!u && !u.dead && u.kind === 'u' && u.owner === seat,
       );
+  /**
+   * an order to a selection leaves out the soldiers still on their way to a squad of that same
+   * selection: they go on joining it (and meet it where it is sent) instead of the squad forming
+   * being called off
+   */
+  const orderable = (ids: unknown) => {
+    const us = mine(ids);
+    const picked = new Set(us.map(u => u.id));
+    return us.filter(u => !u.joinTo || !picked.has(u.joinTo));
+  };
   switch (c.t) {
     case 'move':
       orderMove(
-        mine(c.ids),
+        orderable(c.ids),
         c.x | 0,
         c.y | 0,
         c.mode === 'move' ? 'move' : 'amove',
@@ -54,7 +64,8 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       return null;
     case 'attack': {
       const e = G.byId.get(c.target);
-      if (e && !e.dead && hostile(seat, e.owner)) orderAttack(mine(c.ids), e);
+      if (e && !e.dead && hostile(seat, e.owner))
+        orderAttack(orderable(c.ids), e);
       else if (e && !e.dead && e.owner !== seat) return msg('error.ally');
       return null;
     }
@@ -63,7 +74,7 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       if (!e || e.dead || e.owner === seat) return null;
       if (!hostile(seat, e.owner)) return msg('error.ally');
       if (!capturable(e, seat)) return msg('error.notCapturable');
-      const us = mine(c.ids);
+      const us = orderable(c.ids);
       if (us.length && !canCapture(e, us)) return msg('error.captureFoot');
       orderCapture(us, e);
       return null;
@@ -88,6 +99,8 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       );
       return 'key' in r ? r : null;
     }
+    case 'arm':
+      return arm(p, G.byId.get(c.b) as Building | undefined);
     case 'spec':
       return specialize(
         p,

@@ -30,4 +30,10 @@ export interface Match {
   crystalFields: Tile[];
   /** 1 on the water tiles a standing bridge covers (troops walk them), from the road network */
   bridges: Uint8Array;
+  /** 1 on every tile under a standing road, its bridges included (troops walk faster there) */
+  roads: Uint8Array;
+  /** sums of `roads` over every box from the map's corner, (MAP_W + 1) × (MAP_H + 1) */
+  roadSum: Int32Array;
+  /** every tile's distance to the nearest road tile, tiles (octile, past any obstacle; 1e9 with no road) */
+  roadDist: Float32Array;
 }

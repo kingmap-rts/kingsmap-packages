@@ -60,6 +60,7 @@ export function stateHash(): string {
     num(bl.owner);
     num(bl.hp);
     num(bl.linked ? 1 : 0);
+    num(bl.arch || 0);
   }
   for (const c of G.convoys) {
     num(c.id);

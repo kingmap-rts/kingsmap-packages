@@ -19,6 +19,8 @@ export type Intent =
   | { t: 'build'; x: number; y: number }
   | { t: 'train'; type: UnitType }
   | { t: 'spec'; b: number; s: SpecType }
+  /** add an archer to our fort or castle (up to three): it shoots one more arrow a volley */
+  | { t: 'arm'; b: number }
   /** where new troops appear */
   | { t: 'spawn'; b: number }
   /** hire troops automatically */

@@ -11,6 +11,8 @@ import { botDiplomacy } from './diplomacy';
 import { botMarket } from './market';
 import { botPaths } from './paths';
 import {
+  archerCost,
+  arm,
   build,
   buildCheck,
   canAfford,
@@ -114,6 +116,26 @@ export function botTick(p: Player) {
       const b = plain.reduce((a, c) => (toFoe(c) < toFoe(a) ? c : a));
       if (!specialize(p, b, 'fort')) acted = true;
     }
+  }
+  // 1b. archers (KAN-30): a fort or the castle hit lately gets one more as soon as it is affordable;
+  // otherwise the one nearest the foe, out of spare goods only
+  if (!acted && foe && G.t > 120) {
+    let best: Building | null = null;
+    let bs = -1e9;
+    for (const b of deps) {
+      const c = archerCost(b);
+      if (!c) continue;
+      const hit = G.t - b.lastHit < 20;
+      const spare =
+        p.res.wood >= c.wood + 20 && p.res.steel >= c.steel * 2 + 20;
+      if (!(hit ? canAfford(p, c) : spare)) continue;
+      const sc = (hit ? 1000 : 0) - toFoe(b) + (b.type === 'hq' ? 5 : 0);
+      if (sc > bs) {
+        bs = sc;
+        best = b;
+      }
+    }
+    if (best && !arm(p, best)) acted = true;
   }
   const wantSpec =
     plain.length > 0 &&

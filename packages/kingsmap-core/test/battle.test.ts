@@ -4,6 +4,7 @@ import { createGame, type Game } from '../src/index';
 import type { Unit, UnitType } from '../src/sim/world/types';
 import { addUnit } from '../src/sim/world/entities';
 import { blowBonus, strikers } from '../src/sim/systems/combat';
+import { roadMap, roadSum } from '../src/sim/state';
 
 /** an empty plain with two realms and nothing else on it */
 function field() {
@@ -20,6 +21,9 @@ function field() {
   G.links = [];
   G.byId.clear();
   G.bAt.fill(-1);
+  // no roads either (the network is never recomputed here, see step)
+  roadMap.fill(0);
+  roadSum.fill(0);
   for (const p of G.players) {
     p.alive = p.id < 2;
     p.res = { wood: 9e5, ore: 0, steel: 9e5, food: 9e5, crystal: 0 };

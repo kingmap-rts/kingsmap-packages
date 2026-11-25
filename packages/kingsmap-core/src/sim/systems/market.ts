@@ -2,6 +2,7 @@
 import type { GameMessage, Player, TradeResource } from '../world/types';
 import { MARKET_GET, MARKET_GIVE, MARKET_RES } from '../config/economy';
 import { msg } from '../world/events';
+import { gain, spend } from '../ledger';
 
 export function trade(
   p: Player,
@@ -15,6 +16,8 @@ export function trade(
     return msg('error.tradeNeeds', { amount: MARKET_GIVE });
   p.res[from] -= MARKET_GIVE;
   p.res[to] += MARKET_GET;
+  spend(p.id, from, 'market', MARKET_GIVE);
+  gain(p.id, to, 'market', MARKET_GET);
   p.stats.traded = (p.stats.traded || 0) + MARKET_GIVE;
   return null;
 }

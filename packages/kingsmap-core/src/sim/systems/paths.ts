@@ -11,6 +11,7 @@ import { dist, segmentDist } from '../util/geometry';
 import { rand } from '../util/rng';
 import { addUnit, canHire, isDepot, nearest } from '../world/entities';
 import { logEvent, msg, notify } from '../world/events';
+import { spend } from '../ledger';
 
 export function fireRainTick(dt: number) {
   if (!G.zones.length) return;
@@ -64,6 +65,7 @@ export function pickPerk(p: Player, id: PerkId): GameMessage | null {
   if (no) return no;
   const n = PERKS[id];
   p.res.crystal -= nodeCost(p.perks.length);
+  spend(p.id, 'crystal', 'perk', nodeCost(p.perks.length));
   p.perks.push(id);
   logEvent('perk', p.id, { id });
   // the first step on a path names the realm's path for everyone

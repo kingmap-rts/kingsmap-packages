@@ -1,7 +1,11 @@
-/** A* on the tile grid (forest costs more). Scratch buffers are shared by all matches. */
+/**
+ * A* on the tile grid: a step costs the time it takes, so a forest is dearer and a road cheaper
+ * (troops take a road when it goes their way). Scratch buffers are shared by all matches.
+ */
 import type { Tile } from '../world/types';
 import { MAP_H, MAP_W, TILES, Terrain } from '../config/map';
-import { terrainMap } from '../state';
+import { ROAD_PACE } from '../config/network';
+import { roadDist, roadMap, roadSum, terrainMap } from '../state';
 import { tileIndex } from '../util/geometry';
 import { walkable } from '../world/terrain';
 
@@ -89,6 +93,36 @@ export const NEIGHBOURS = [
   [-1, -1, 1.414],
 ];
 
+/** a step onto a road tile costs this share of a step over open ground */
+const ROAD_COST = 1 / ROAD_PACE;
+
+/** road tiles in the box x0..x1 × y0..y1 (inclusive, clipped to the map), from roadSum */
+function roadsIn(x0: number, y0: number, x1: number, y1: number) {
+  x0 = Math.max(0, x0);
+  y0 = Math.max(0, y0);
+  x1 = Math.min(MAP_W - 1, x1) + 1;
+  y1 = Math.min(MAP_H - 1, y1) + 1;
+  if (x0 >= x1 || y0 >= y1) return 0;
+  const W = MAP_W + 1;
+  return (
+    roadSum[y1 * W + x1] -
+    roadSum[y0 * W + x1] -
+    roadSum[y1 * W + x0] +
+    roadSum[y0 * W + x0]
+  );
+}
+
+/**
+ * A lower bound of the cost from a tile to the goal `oct` away (octile) with roads about: a way off
+ * the roads costs at least oct; a way by road walks at least `from` - 1.414 off-road to its first road
+ * tile (the step onto it is a road step) and `to` from its last one to the goal, at full cost, and
+ * the rest at ROAD_COST at best. Far from every road it is the plain estimate, near one it shrinks.
+ */
+function roadEstimate(oct: number, from: number, to: number) {
+  const off = Math.max(0, from - 1.414) + to;
+  return Math.min(oct, oct * ROAD_COST + off * (1 - ROAD_COST));
+}
+
 export function findPath(
   sx: number,
   sy: number,
@@ -103,6 +137,23 @@ export function findPath(
   const si = tileIndex(sx, sy);
   const ti = tileIndex(tx, ty);
   if (si === ti) return [[tx, ty]];
+  // The straight way is the goal's distance only where every step costs at least 1; with a road
+  // near (in the box of start and goal, widened by a share of the trip: a road farther off is never
+  // worth the walk to it) a step may cost ROAD_COST, so the estimate shrinks to stay below the cost
+  // and the search still finds the bend off to the road. Without one the search is exactly the
+  // quick one over open ground.
+  const ox = Math.abs(sx - tx);
+  const oy = Math.abs(sy - ty);
+  const m = 2 + ((Math.max(ox, oy) * 0.15) | 0);
+  const roads =
+    roadsIn(
+      Math.min(sx, tx) - m,
+      Math.min(sy, ty) - m,
+      Math.max(sx, tx) + m,
+      Math.max(sy, ty) + m,
+    ) > 0;
+  // the goal's own walk from the nearest road: no way by road avoids it
+  const toRoad = roadDist[ti];
   searchNo++;
   heapKeys.length = 0;
   heapVals.length = 0;
@@ -143,14 +194,30 @@ export function findPath(
       const ni = tileIndex(nx, ny);
       if (closedIn[ni] === searchNo) continue;
       const ng =
-        gScore[cur] + c * (terrainMap[ni] === Terrain.Forest ? 1.3 : 1);
+        gScore[cur] +
+        c *
+          (roadMap[ni] === 1
+            ? ROAD_COST
+            : terrainMap[ni] === Terrain.Forest
+              ? 1.3
+              : 1);
       if (seenIn[ni] !== searchNo || ng < gScore[ni]) {
         seenIn[ni] = searchNo;
         gScore[ni] = ng;
         cameFrom[ni] = cur;
         const ax = Math.abs(nx - tx);
         const ay = Math.abs(ny - ty);
-        heapPush(ni, ng + Math.max(ax, ay) + 0.414 * Math.min(ax, ay));
+        heapPush(
+          ni,
+          roads
+            ? ng +
+                roadEstimate(
+                  Math.max(ax, ay) + 0.414 * Math.min(ax, ay),
+                  roadDist[ni],
+                  toRoad,
+                )
+            : ng + Math.max(ax, ay) + 0.414 * Math.min(ax, ay),
+        );
       }
     }
   }

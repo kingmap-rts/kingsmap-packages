@@ -21,6 +21,7 @@ import {
 } from '../config/diplomacy';
 import { SEATS } from '../config/map';
 import { G } from '../state';
+import { spend } from '../ledger';
 import { dist } from '../util/geometry';
 import { addConvoy } from '../world/entities';
 import { logEvent, msg, notify } from '../world/events';
@@ -166,6 +167,7 @@ export function giftAlly(
   if (p.res[k] < GIFT_AMOUNT[k]) return msg('error.noResources');
   if (!p.hq || p.hq.dead || !q.hq || q.hq.dead) return msg('error.noCastle');
   p.res[k] -= GIFT_AMOUNT[k];
+  spend(p.id, k, 'gift', GIFT_AMOUNT[k]);
   p.giftCd = G.t + GIFT_COOLDOWN;
   p.stats.giftsSent += GIFT_AMOUNT[k];
   const cargo: Bag = { wood: 0, ore: 0, steel: 0, food: 0, crystal: 0 };

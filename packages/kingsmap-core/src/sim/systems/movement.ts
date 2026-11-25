@@ -1,12 +1,11 @@
 /** Moving along paths and move/attack orders. */
 import type { Building, Entity, Tile, Unit } from '../world/types';
-import { MAP_H, MAP_W, Terrain } from '../config/map';
+import { MAP_H, MAP_W } from '../config/map';
 import { UNITS } from '../config/units';
-import { terrainMap } from '../state';
 import { partingBlows } from './combat';
 import { findPath } from './pathfinding';
 import { dist, tileIndex, vecLen } from '../util/geometry';
-import { walkable } from '../world/terrain';
+import { paceAt, walkable } from '../world/terrain';
 
 export function moveToward(
   e: Unit,
@@ -19,8 +18,8 @@ export function moveToward(
   const dy = ty - e.y;
   const d = vecLen(dx, dy);
   if (d < 1e-4) return true;
-  const tk = tileIndex(e.x | 0, e.y | 0);
-  const sp = speed * (terrainMap[tk] === Terrain.Forest ? 0.75 : 1) * dt;
+  // faster on a road, slower in a forest: the tile the unit stands on sets the pace
+  const sp = speed * paceAt(tileIndex(e.x | 0, e.y | 0)) * dt;
   const st = Math.min(sp, d);
   const nx = e.x + (dx / d) * st;
   const ny = e.y + (dy / d) * st;
@@ -107,18 +106,25 @@ const RANK = 1.4;
 /** the slowest pace a unit is held back to on a group march, a share of its speed */
 const MIN_PACE = 0.35;
 
-/** length of a path walked from (x, y), tiles */
-function pathLen(x: number, y: number, p: Tile[], end: Tile | null) {
-  let l = 0;
+/**
+ * time to walk a path from (x, y) at speed 1, seconds: each leg at the pace of the tiles it runs
+ * over (half of it on the tile it starts from, half on the one it ends on), so a unit going by road
+ * counts on arriving sooner than one going over the grass beside it
+ */
+function pathTime(x: number, y: number, p: Tile[], end: Tile | null) {
+  let t = 0;
+  let k = tileIndex(x | 0, y | 0);
   for (let i = 0; i < p.length; i++) {
     const last = i === p.length - 1 && end;
     const nx = last ? end[0] : p[i][0] + 0.5;
     const ny = last ? end[1] : p[i][1] + 0.5;
-    l += dist(x, y, nx, ny);
+    const nk = tileIndex(p[i][0], p[i][1]);
+    t += (dist(x, y, nx, ny) * (1 / paceAt(k) + 1 / paceAt(nk))) / 2;
     x = nx;
     y = ny;
+    k = nk;
   }
-  return l;
+  return t;
 }
 
 /**
@@ -169,7 +175,7 @@ export function orderMove(
   const side = (u: Unit) => (u.x - cx) * ax + (u.y - cy) * ay;
   const sorted = [...units].sort((a, b) => along(b) - along(a) || a.id - b.id);
   const taken = new Set<number>();
-  const plan: { u: Unit; end: Tile; path: Tile[] | null; len: number }[] = [];
+  const plan: { u: Unit; end: Tile; path: Tile[] | null; time: number }[] = [];
   for (let r = 0; r * cols < n; r++) {
     const rank = sorted
       .slice(r * cols, r * cols + cols)
@@ -204,21 +210,19 @@ export function orderMove(
         u,
         end,
         path,
-        len: path ? pathLen(u.x, u.y, path, end) : 0,
+        time: path ? pathTime(u.x, u.y, path, end) / UNITS[u.type].speed : 0,
       });
     }
   }
-  // one pace for the group: the unit with the longest walk for its speed sets the time
+  // one pace for the group: the unit with the longest walk for its speed sets the time (a road
+  // or a forest on its way counted in), so the ranks reach their places together
   let time = 0;
-  for (const q of plan) time = Math.max(time, q.len / UNITS[q.u.type].speed);
-  for (const { u, end, path, len } of plan) {
+  for (const q of plan) time = Math.max(time, q.time);
+  for (const { u, end, path, time: own } of plan) {
     u.path = path;
     u.dest = [end[0] | 0, end[1] | 0];
     u.end = end;
-    u.gsp =
-      time > 0
-        ? Math.max(MIN_PACE, Math.min(1, len / UNITS[u.type].speed / time))
-        : 1;
+    u.gsp = time > 0 ? Math.max(MIN_PACE, Math.min(1, own / time)) : 1;
     u.tgt = 0;
     u.ftgt = 0;
     u.slot = -1;

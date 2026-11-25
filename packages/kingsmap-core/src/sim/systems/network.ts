@@ -16,6 +16,7 @@ import { WAGON_R } from '../config/units';
 import { claimRadius, hasPerk, roadLength, siteWorkers } from '../modifiers';
 import { G, matchState, depositMap, sites, terrainMap } from '../state';
 import { updateBridges } from './bridges';
+import { updateRoads } from './roadways';
 import { captureTick } from './capture';
 import { hostile, supplyDeps } from './diplomacy';
 import { roadTiles } from './roads';
@@ -371,4 +372,5 @@ export function recomputeNetwork() {
     u.supplied = s;
   }
   updateBridges();
+  updateRoads();
 }

@@ -11,6 +11,7 @@ export { SEATS, TILE_PX, MAP_W, MAP_H, TILES, COLORS } from './sim/config/map';
 // ---- roads and territory ----
 export {
   ROAD_LEN,
+  ROAD_PACE,
   HQ_RADIUS,
   POST_RADIUS,
   CAPTURE_TIME,
@@ -34,6 +35,11 @@ export {
 export {
   BUILDINGS,
   POST_SPECS,
+  ARCHERS_MAX,
+  ARCHER_COST,
+  ARCHER_HP,
+  ARROW_DMG,
+  ARROW_RANGE,
   SITE_TYPES,
   SITE_WORKERS,
 } from './sim/config/buildings';
@@ -127,4 +133,5 @@ export {
   canCapture,
   captureTime,
 } from './sim/systems/capture';
-export { canAfford } from './sim/commands/build';
+// a fort's and the castle's archers (KAN-30): which table, what the next one costs
+export { canAfford, archerCost, archerKind } from './sim/commands/build';

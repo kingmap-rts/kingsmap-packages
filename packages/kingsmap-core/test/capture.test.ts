@@ -216,10 +216,11 @@ describe('buildings are attacked only by order; linked posts are captured (KAN-4
     expect(post.owner).toBe(0);
     expect(post.spec).toBe('forge');
     expect(post.hp).toBe(post.maxhp);
-    // about the hold time (checked every 0.4 s, the squads still settling), far longer than a cut-off post
+    // about the hold time (checked every 0.4 s, the squads still settling, and chasing off the
+    // castle's recruits down its road, which they walk fast: KAN-37), far longer than a cut-off post
     const took = game.world.t - from;
     expect(took).toBeGreaterThan(CAPTURE_HOLD_TIME - 1);
-    expect(took).toBeLessThan(CAPTURE_HOLD_TIME + 4);
+    expect(took).toBeLessThan(CAPTURE_HOLD_TIME + 8);
     expect(CAPTURE_HOLD_TIME).toBeGreaterThan(CAPTURE_TIME * 2);
   });
 

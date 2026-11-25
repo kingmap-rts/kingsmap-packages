@@ -47,6 +47,8 @@ export function addBuilding(
     linked: false,
     lastHit: -9,
   };
+  // the castle holds its first archer from the start (a fort gets one when it is made)
+  if (type === 'hq') b.arch = 1;
   G.buildings.push(b);
   G.byId.set(b.id, b);
   G.bAt[tileIndex(x, y)] = b.id;

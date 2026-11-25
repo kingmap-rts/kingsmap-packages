@@ -4,12 +4,18 @@ import type {
   BuildingType,
   Cost,
   GameMessage,
+  LedgerSink,
   Player,
   SpecType,
   Unit,
   UnitType,
 } from '../world/types';
-import { POST_SPECS } from '../config/buildings';
+import {
+  ARCHERS_MAX,
+  ARCHER_COST,
+  ARCHER_HP,
+  POST_SPECS,
+} from '../config/buildings';
 import { COLORS } from '../config/map';
 import { UNITS } from '../config/units';
 import {
@@ -27,6 +33,7 @@ import { rand } from '../util/rng';
 import { addBuilding, addUnit, canHire, isDepot } from '../world/entities';
 import { logEvent, msg } from '../world/events';
 import { dry } from '../world/terrain';
+import { spend } from '../ledger';
 
 export function canAfford(p: Player, c: Cost) {
   return (
@@ -36,10 +43,13 @@ export function canAfford(p: Player, c: Cost) {
   );
 }
 
-export function pay(p: Player, c: Cost) {
+export function pay(p: Player, c: Cost, on: LedgerSink = 'build') {
   p.res.wood -= c.wood || 0;
   p.res.steel -= c.steel || 0;
   p.res.food -= c.food || 0;
+  spend(p.id, 'wood', on, c.wood || 0);
+  spend(p.id, 'steel', on, c.steel || 0);
+  spend(p.id, 'food', on, c.food || 0);
 }
 
 export function buildCheck(
@@ -109,6 +119,7 @@ export function specialize(
     const m = hasPerk(p, 'walls') ? 1.3 : 1;
     b.maxhp = 700 * m;
     b.hp += 700 * m - 320;
+    b.arch = 1;
   }
   G.fx.push({
     x: b.x + 0.5,
@@ -119,6 +130,45 @@ export function specialize(
     color: COLORS[p.id],
   });
   G.netT = 0;
+  return null;
+}
+
+/** which archer table a building uses: a fort's, the castle's, or none (it holds no archers) */
+export const archerKind = (b: Building): 'fort' | 'hq' | null =>
+  b.type === 'hq' ? 'hq' : b.spec === 'fort' ? 'fort' : null;
+
+/** what the next archer of this fort or castle costs, or null when it holds no more */
+export function archerCost(
+  b: Building,
+): { wood: number; steel: number } | null {
+  const k = archerKind(b);
+  const n = b.arch || 1;
+  return k && n < ARCHERS_MAX ? ARCHER_COST[k][n - 1] : null;
+}
+
+/** add an archer to our fort or castle (KAN-30): one more arrow a volley, and stronger walls */
+export function arm(p: Player, b: Building | undefined): GameMessage | null {
+  if (!b || b.dead || b.owner !== p.id || b.kind !== 'b')
+    return msg('error.notAllowed');
+  const k = archerKind(b);
+  const cost = archerCost(b);
+  if (!k || !cost) return msg('error.notAllowed');
+  if (!b.linked) return msg('error.postCut');
+  if (!canAfford(p, cost)) return msg('error.noResources');
+  pay(p, cost);
+  b.arch = (b.arch || 1) + 1;
+  const hp = ARCHER_HP[k] * (k === 'fort' && hasPerk(p, 'walls') ? 1.3 : 1);
+  b.maxhp += hp;
+  b.hp += hp;
+  logEvent('arm', p.id, { n: b.arch });
+  G.fx.push({
+    x: b.x + 0.5,
+    y: b.y + 0.5,
+    t: 0,
+    dur: 0.8,
+    r: 1.3,
+    color: COLORS[p.id],
+  });
   return null;
 }
 
@@ -155,7 +205,7 @@ export function train(
     const x = d.x + dx;
     const y = d.y + dy;
     if (dry(x, y) && G.bAt[tileIndex(x, y)] === -1) {
-      pay(p, cost);
+      pay(p, cost, 'hire');
       p.pop -= S.pop || 1;
       p.stats.hired++;
       return addUnit(

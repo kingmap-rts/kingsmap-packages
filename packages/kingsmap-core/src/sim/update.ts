@@ -13,6 +13,7 @@ import {
   STORE_BASE,
   STORE_PER_DEPOT,
 } from './config/economy';
+import { ARCHERS_MAX, ARROW_DMG, ARROW_RANGE } from './config/buildings';
 import { SEATS } from './config/map';
 import { AMMO_COST, UNITS, WAGON_FOOD } from './config/units';
 import {
@@ -23,6 +24,7 @@ import {
   hasPerk,
   yieldBonus,
 } from './modifiers';
+import { castleBooks, gain, spend, unfed } from './ledger';
 import { G } from './state';
 import {
   acquireTarget,
@@ -45,7 +47,7 @@ import { recomputeNetwork } from './systems/network';
 import { findPath } from './systems/pathfinding';
 import { fireRainTick } from './systems/paths';
 import { arsonTick } from './systems/sabotage';
-import { memberLoss, squadTick } from './systems/squads';
+import { joinTick, memberLoss, squadTick } from './systems/squads';
 import { dominationTick } from './systems/victory';
 import { dist, vecLen } from './util/geometry';
 import { goodsTotal } from './util/resources';
@@ -53,6 +55,10 @@ import { rand } from './util/rng';
 import { centerX, centerY, isDepot } from './world/entities';
 import { msg, notify, snapshot } from './world/events';
 import { walkable } from './world/terrain';
+
+/** scratch for a turret's volley: its nearest foes in reach and their distances */
+const volleyU: (Unit | null)[] = new Array(ARCHERS_MAX).fill(null);
+const volleyD: number[] = new Array(ARCHERS_MAX).fill(0);
 
 /** units that ran at a foe this tick (the separation lets them slip past their own troops) */
 const chasing = new Set<number>();
@@ -77,6 +83,7 @@ export function update(dt: number) {
       const c = Math.min(p.res.ore, HQ_FORGE * forgeBonus(p) * dt);
       p.res.ore -= c;
       p.res.steel += c;
+      castleBooks(p.id, dt, c);
     }
   }
   const sold = new Array(SEATS).fill(0);
@@ -86,13 +93,17 @@ export function update(dt: number) {
     sold[u.owner] += nn;
     const p = G.players[u.owner];
     p.res.food -= UNITS[u.type].upk * nn * dt;
+    spend(u.owner, 'food', 'army', UNITS[u.type].upk * nn * dt);
   }
   for (const p of G.players) {
     if (!p.alive) continue;
     p.soldiers = sold[p.id];
     const tot = p.pop + sold[p.id];
-    p.res.food -= p.pop * FOOD_PER_PERSON * dt;
+    const ate = p.pop * FOOD_PER_PERSON * dt;
+    p.res.food -= ate;
+    spend(p.id, 'food', 'people', ate);
     if (p.res.food <= 0) {
+      unfed(p.id, -p.res.food, ate);
       p.res.food = 0;
       p.pop = Math.max(0, p.pop - 0.35 * dt);
       p.hungry = true;
@@ -122,6 +133,7 @@ export function update(dt: number) {
     for (const k of RESOURCES)
       if (p.res[k] > p.store) {
         p.stats.wasted += p.res[k] - p.store;
+        spend(p.id, k, 'overflow', p.res[k] - p.store);
         p.res[k] = p.store;
       }
   }
@@ -142,32 +154,55 @@ export function update(dt: number) {
   for (const b of G.buildings) {
     if (b.dead || !isDepot(b)) continue;
     const p = G.players[b.owner];
-    // turrets
+    // turrets: each archer of a fort or the castle shoots once a volley, at the nearest foes in
+    // reach (one foe each while there are enough of them, the nearest one again when not)
     if (b.spec === 'fort' || b.type === 'hq') {
       b.cd -= dt;
       if (b.cd <= 0) {
-        let best = null;
-        let bd = 3.6;
+        const n = b.arch || 1;
+        const cx = b.x + 0.5;
+        const cy = b.y + 0.5;
+        let k = 0;
         for (const u of G.units) {
           if (u.dead || !hostile(b.owner, u.owner)) continue;
-          if (Math.abs(u.x - b.x - 0.5) > bd || Math.abs(u.y - b.y - 0.5) > bd)
+          if (
+            Math.abs(u.x - cx) > ARROW_RANGE ||
+            Math.abs(u.y - cy) > ARROW_RANGE
+          )
             continue;
-          const d = dist(u.x, u.y, b.x + 0.5, b.y + 0.5);
-          if (d < bd) {
-            bd = d;
-            best = u;
+          const d = dist(u.x, u.y, cx, cy);
+          if (d >= ARROW_RANGE) continue;
+          // insertion into the n nearest so far (ties keep the earlier unit)
+          let i = k < n ? k++ : n;
+          while (i > 0 && volleyD[i - 1] > d) {
+            if (i < n) {
+              volleyD[i] = volleyD[i - 1];
+              volleyU[i] = volleyU[i - 1];
+            }
+            i--;
+          }
+          if (i < n) {
+            volleyD[i] = d;
+            volleyU[i] = u;
           }
         }
-        if (best) {
-          hit(best, b.type === 'hq' ? 8 : 7, b.owner, b.x + 0.5, b.y + 0.5);
+        if (k) {
+          const dmg = ARROW_DMG[b.type === 'hq' ? 'hq' : 'fort'];
+          for (let a = 0; a < n; a++) {
+            const t = volleyU[a < k ? a : 0]!;
+            if (!t.dead) hit(t, dmg, b.owner, cx, cy);
+          }
           b.cd = 1;
         } else b.cd = 0.3;
       }
     }
     if (!b.linked) continue;
     if (b.type === 'hq') {
-      for (const k of RESOURCES)
-        p.res[k] += b.yld[k] * p.mult * p.eff * yieldBonus(p, k) * dt;
+      for (const k of RESOURCES) {
+        const v = b.yld[k] * p.mult * p.eff * yieldBonus(p, k) * dt;
+        p.res[k] += v;
+        gain(p.id, k, 'sites', v);
+      }
       continue;
     }
     if (goodsTotal(b.stock) < STOCK_CAP)
@@ -214,6 +249,7 @@ export function update(dt: number) {
     if (c.giftTo != null) {
       const q = G.players[c.giftTo];
       for (const k of RESOURCES) q.res[k] += c.cargo[k];
+      for (const k of RESOURCES) gain(q.id, k, 'gift', c.cargo[k]);
       q.stats.giftsGot += goodsTotal(c.cargo);
       // a gift carries one resource
       const res = RESOURCES.find(k => c.cargo[k] > 0) ?? 'wood';
@@ -229,6 +265,7 @@ export function update(dt: number) {
     } else if (nb.type === 'hq') {
       const p = G.players[c.owner];
       for (const k of RESOURCES) p.res[k] += c.cargo[k];
+      for (const k of RESOURCES) gain(p.id, k, 'sites', c.cargo[k]);
       p.stats.delivered += goodsTotal(c.cargo);
       p.stats.crystals += c.cargo.crystal;
     } else for (const k of RESOURCES) nb.stock[k] += c.cargo[k];
@@ -236,6 +273,7 @@ export function update(dt: number) {
   }
   fireRainTick(dt);
   diploTick();
+  joinTick();
   G.sqT -= dt;
   if (G.sqT <= 0) {
     G.sqT = 0.5;
@@ -367,6 +405,7 @@ export function update(dt: number) {
           }
         } else if (p.res.steel >= cost) {
           p.res.steel -= cost;
+          spend(u.owner, 'steel', 'ammo', cost);
           u.ammo += amt;
         }
       }

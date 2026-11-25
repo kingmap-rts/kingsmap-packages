@@ -6,12 +6,14 @@ import {
   type Difficulty,
   type GameMessage,
   type Intent,
+  type ResourceLedger,
 } from '@kingmap-rts/kingsmap-types';
 import { DEFAULT_BOT_PARAMS } from './sim/config/ai';
 import { MAP_H, MAP_W } from './sim/config/map';
 import { buildCheck } from './sim/commands/build';
 import { applyCommand } from './sim/commands/apply';
 import { stateHash } from './sim/hash';
+import { readLedger, reconcile, startLedger } from './sim/ledger';
 import { activate, matchState } from './sim/state';
 import { allied, allyIds, hostile, pactOf } from './sim/systems/diplomacy';
 import { update } from './sim/update';
@@ -42,6 +44,7 @@ export class Game {
       p.ai.wave = p.ai.P.wave0;
       if (p.ai.P.waveAt0 != null) p.ai.waveAt = p.ai.P.waveAt0;
     }
+    if (!G.sim) startLedger();
   }
 
   /** The world, for renderers and UI. Treat it as read only: change it only through apply(). */
@@ -70,7 +73,10 @@ export class Game {
   /** Advance one TICK (nothing happens once the match is over). */
   step(): void {
     this.use();
-    if (!this.match.world.over) update(Lockstep.TickSeconds);
+    if (!this.match.world.over) {
+      update(Lockstep.TickSeconds);
+      reconcile();
+    }
   }
 
   /** Apply one intent of a seat. Returns why it was refused (a message key for the client to translate), else null. */
@@ -104,6 +110,11 @@ export class Game {
   }
 
   // ---- questions the UI asks (never change the world) ----
+
+  /** Where this seat's resources came from and went to over the last minute (display only). */
+  ledger(seat: number): ResourceLedger {
+    return readLedger(this.match.world, seat);
+  }
 
   /** Why this seat cannot put a trading post on this tile, or null when it can. */
   buildError(seat: number, x: number, y: number): GameMessage | null {

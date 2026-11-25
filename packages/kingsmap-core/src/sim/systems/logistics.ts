@@ -24,6 +24,7 @@ import {
   nearestLinkedDepot,
 } from '../world/entities';
 import { msg, notify } from '../world/events';
+import { gain, spend } from '../ledger';
 
 export function sendCaravan(b: Building) {
   const forge = b.spec === 'forge';
@@ -88,10 +89,12 @@ export function wagonTick(u: Unit, dt: number) {
     );
     if (st > 0) {
       p.res.steel -= st;
+      spend(p.id, 'steel', 'supply', st);
       cargo.steel += st;
     }
     if (fd > 0) {
       p.res.food -= fd;
+      spend(p.id, 'food', 'supply', fd);
       cargo.food += fd;
     }
     break;
@@ -108,7 +111,11 @@ export function banditLoot(u: Unit, dt: number) {
         continue;
       const p = G.players[u.owner];
       const bag = u.bag!; // carried > 0
-      if (b.type === 'hq') for (const k of RESOURCES) p.res[k] += bag[k];
+      if (b.type === 'hq')
+        for (const k of RESOURCES) {
+          p.res[k] += bag[k];
+          gain(p.id, k, 'loot', bag[k]);
+        }
       else for (const k of RESOURCES) b.stock[k] += bag[k];
       const n = Math.round(carried);
       p.stats.plunder += n;

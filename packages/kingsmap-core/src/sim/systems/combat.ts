@@ -14,6 +14,7 @@ import { walkable } from '../world/terrain';
 import { rand } from '../util/rng';
 import { lootCarried, centerX, centerY } from '../world/entities';
 import { logEvent, msg, notify } from '../world/events';
+import { gain } from '../ledger';
 
 export function kill(e: Entity, silent?: boolean, by?: number) {
   if (e.dead) return;
@@ -322,6 +323,12 @@ export function acquireTarget(u: Unit) {
     u.tgt = 0;
     return;
   }
+  // a soldier on its way to its squad does not turn aside for foes: it fights once it is in
+  if (u.joinTo && !u.ftgt) {
+    u.tgt = 0;
+    u.slot = -1;
+    return;
+  }
   if (u.ftgt) {
     const f = G.byId.get(u.ftgt);
     if (f && !f.dead) {
@@ -455,6 +462,7 @@ export function hit(
       for (const k of RESOURCES) {
         const v = Math.floor(t.cargo[k] * 0.5);
         p.res[k] += v;
+        gain(p.id, k, 'loot', v);
         sum += v;
       }
       p.stats.loot += sum;

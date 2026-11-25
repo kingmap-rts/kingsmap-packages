@@ -19,6 +19,7 @@ const PLAYER_INTENTS = new Set<string>([
   'build',
   'train',
   'spec',
+  'arm',
   'spawn',
   'auto',
   'doctrine',
@@ -133,6 +134,8 @@ export function cleanIntent(x: any): Intent | null {
       return num(x.b) && oneOf(SPECS, x.s)
         ? { t: 'spec', b: x.b, s: x.s }
         : null;
+    case 'arm':
+      return num(x.b) ? { t: 'arm', b: x.b } : null;
     case 'spawn':
       return num(x.b) ? { t: 'spawn', b: x.b } : null;
     case 'auto':
