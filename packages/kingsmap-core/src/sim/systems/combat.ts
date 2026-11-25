@@ -2,13 +2,13 @@
 import { Color } from '@kingmap-rts/kingsmap-types';
 import type { Building, Entity, Unit } from '../world/types';
 import { RESOURCES } from '../config/economy';
-import { COLORS, SEATS } from '../config/map';
+import { COLORS, MAP_W, SEATS } from '../config/map';
 import { UNITS } from '../config/units';
 import { G } from '../state';
 import { hostile } from './diplomacy';
 import { findPath } from './pathfinding';
 import { memberLoss } from './squads';
-import { detCos, detSin, dist, tileIndex } from '../util/geometry';
+import { dist, segmentDist, tileIndex, vecLen } from '../util/geometry';
 import { walkable } from '../world/terrain';
 import { rand } from '../util/rng';
 import { lootCarried, centerX, centerY } from '../world/entities';
@@ -98,67 +98,208 @@ export function eliminate(pid: number, by?: number) {
 /** a unit's body radius for the separation, tiles */
 export const bodyR = (u: Unit) => (u.n > 1 ? 0.5 : 0.275);
 
-/** directions of the attack spots around a foe */
-const RING = Array.from({ length: 16 }, (_, i) => [
-  detCos((i * Math.PI) / 8),
-  detSin((i * Math.PI) / 8),
-]);
+/** a melee unit: fights hand to hand (squads of it take sides around a foe) */
+export const melee = (u: Unit) => UNITS[u.type].range <= 2;
 
 /**
- * Where u should run to hit foe t: the free spot in reach around t nearest to u, so attackers
- * spread around their foe and walk past their own troops instead of pressing on their backs.
- * The foe itself when every spot is taken.
+ * The four sides of a foe a melee unit fights from: front, left flank, right flank, rear. They are
+ * laid out along the way the foe faces its own fight (its target), or the way it faces when it
+ * fights nobody. Each side takes one unit of each seat; a foe with every side taken counts as farther
+ * away for the next attacker (acquireTarget), so attackers spread over the enemy.
  */
-export function attackSpot(u: Unit, t: Unit): [number, number] {
-  const S = UNITS[u.type];
-  const touch = bodyR(u) + bodyR(t);
-  const r = Math.max(touch, Math.min(S.range * 0.85, touch + 0.3));
-  const near: Unit[] = [];
-  for (const o of G.units)
-    if (
-      o !== u &&
-      o !== t &&
-      !o.dead &&
-      Math.abs(o.x - t.x) < r + 1.2 &&
-      Math.abs(o.y - t.y) < r + 1.2
-    )
-      near.push(o);
-  let bx = t.x;
-  let by = t.y;
-  let bd = 1e9;
-  for (const [c, s] of RING) {
-    const x = t.x + c * r;
-    const y = t.y + s * r;
-    if (!walkable(x | 0, y | 0)) continue;
-    let free = true;
-    for (const o of near)
-      if (dist(o.x, o.y, x, y) < (bodyR(o) + bodyR(u)) * 0.9) {
-        free = false;
-        break;
-      }
-    if (!free) continue;
-    const d = dist(u.x, u.y, x, y);
-    if (d < bd) {
-      bd = d;
-      bx = x;
-      by = y;
-    }
-  }
-  return [bx, by];
-}
+const SIDES = 4;
+
+/** attackers of each seat on each side of each foe (key: foe id * SEATS + seat), built once per tick */
+const sides = new Map<number, number[]>();
 
 /** how much farther a foe looks for every unit of ours already attacking it, tiles */
 const CROWD = 0.5;
 
+/** how much farther a foe with all four sides taken by our troops looks, tiles */
+const SURROUNDED = 3;
+
+/** how much farther a unit waiting behind a surrounded foe looks for another, tiles */
+const WAIT_LOOK = 2.5;
+
+/** how far from an ordered foe that is surrounded a unit looks for another one to fight, tiles */
+const ASIDE = 3;
+
 /** units of each seat on each target (key: target id * SEATS + seat), counted once per tick */
 const onTarget = new Map<number, number>();
 
+/** the way foe t faces its fight: toward its own unit target, else its facing */
+function frontOf(t: Unit): [number, number] {
+  const o = t.tgt ? G.byId.get(t.tgt) : null;
+  if (o && !o.dead && o.kind === 'u') {
+    const dx = o.x - t.x;
+    const dy = o.y - t.y;
+    const l = vecLen(dx, dy);
+    if (l > 1e-3) return [dx / l, dy / l];
+  }
+  return [t.hx, t.hy];
+}
+
+/** how far from foe t's centre unit u stands to strike it: shoulder to shoulder */
+export const touch = (u: Unit, t: Unit) => bodyR(u) + bodyR(t) + 0.05;
+
+/** where side k of foe t is for unit u (tiles) */
+export function sideSpot(u: Unit, t: Unit, k: number): [number, number] {
+  const [fx, fy] = frontOf(t);
+  // front, its left (seen from the foe), its right, behind it
+  const dx = k === 0 ? fx : k === 1 ? fy : k === 2 ? -fy : -fx;
+  const dy = k === 0 ? fy : k === 1 ? -fx : k === 2 ? fx : -fy;
+  const r = touch(u, t);
+  return [t.x + dx * r, t.y + dy * r];
+}
+
+/**
+ * The side of foe t unit u takes: the one it already holds, else the free side nearest to it (one
+ * on water or a mountain does not count), -1 when every side is taken by its mates.
+ */
+export function takeSide(u: Unit, t: Unit): number {
+  const key = t.id * SEATS + u.owner;
+  let held = sides.get(key);
+  if (!held) {
+    held = new Array(SIDES).fill(0);
+    sides.set(key, held);
+  }
+  if (u.slot >= 0 && held[u.slot] === u.id) return u.slot;
+  if (u.slot >= 0 && !held[u.slot]) {
+    held[u.slot] = u.id;
+    return u.slot;
+  }
+  let best = -1;
+  let bd = 1e9;
+  for (let k = 0; k < SIDES; k++) {
+    if (held[k] || !open(u, t, k)) continue;
+    const [x, y] = sideSpot(u, t, k);
+    const d = dist(u.x, u.y, x, y);
+    if (d < bd) {
+      bd = d;
+      best = k;
+    }
+  }
+  if (best >= 0) held[best] = u.id;
+  return best;
+}
+
 export function countTargets() {
   onTarget.clear();
+  sides.clear();
+  fightAt.clear();
+  indexBodies();
   for (const u of G.units) {
     if (u.dead || !u.tgt) continue;
+    const t = G.byId.get(u.tgt);
+    if (t && !t.dead && t.kind === 'u')
+      fightAt.add(((u.y | 0) * MAP_W + (u.x | 0)) * SEATS + u.owner);
     const k = u.tgt * SEATS + u.owner;
     onTarget.set(k, (onTarget.get(k) ?? 0) + 1);
+    // the sides held since the last tick stay held (first come, first kept)
+    if (u.slot < 0) continue;
+    let held = sides.get(k);
+    if (!held) {
+      held = new Array(SIDES).fill(0);
+      sides.set(k, held);
+    }
+    if (held[u.slot]) u.slot = -1;
+    else held[u.slot] = u.id;
+  }
+}
+
+/**
+ * Side k of foe t is open to u: on walkable ground, nobody else's body stands there (in a line of
+ * squads the flanks are their neighbours' places), and u can get there without going through t.
+ */
+function open(u: Unit, t: Unit, k: number) {
+  const [x, y] = sideSpot(u, t, k);
+  if (!walkable(x | 0, y | 0)) return false;
+  for (const i of bodiesNear(x, y)) {
+    const o = G.units[i];
+    if (o === u || o === t || o.dead) continue;
+    if (dist(o.x, o.y, x, y) < bodyR(o) + bodyR(u) * 0.5) return false;
+  }
+  // the way there passes the foe's body: that side is behind it
+  return segmentDist(t.x, t.y, u.x, u.y, x, y) >= touch(u, t) * 0.8;
+}
+
+/**
+ * u stands at rest (its march over, no order to walk past foes) while its mates right next to it
+ * fight: it looks a little farther for a foe, so the back ranks of a group join the fight in front
+ * of them instead of watching it
+ */
+function joinsMates(u: Unit) {
+  if (!melee(u) || u.order === 'move' || (u.path && u.path.length))
+    return false;
+  const cx = u.x | 0;
+  const cy = u.y | 0;
+  for (let y = cy - MATES; y <= cy + MATES; y++)
+    for (let x = cx - MATES; x <= cx + MATES; x++)
+      if (fightAt.has((y * MAP_W + x) * SEATS + u.owner)) return true;
+  return false;
+}
+
+/** how near a mate must fight for a unit at rest to join in, tiles */
+const MATES = 3;
+
+/** tiles where units of a seat fight a unit this tick (key: tile index * SEATS + seat) */
+const fightAt = new Set<number>();
+
+/** u has no side of foe t to fight from: each is held by its mates or closed */
+function surrounded(u: Unit, t: Unit) {
+  const held = sides.get(t.id * SEATS + u.owner);
+  for (let k = 0; k < SIDES; k++) {
+    const id = held ? held[k] : 0;
+    if (id === u.id) return false;
+    if (!id && open(u, t, k)) return false;
+  }
+  return true;
+}
+
+/** units on each tile (tile index -> indices into G.units, ascending), see indexBodies */
+const cells = new Map<number, number[]>();
+
+/** files every unit under its tile; call when positions changed (once per tick, and before separation) */
+export function indexBodies() {
+  cells.clear();
+  const us = G.units;
+  for (let i = 0; i < us.length; i++) {
+    const a = us[i];
+    if (a.dead) continue;
+    const k = (a.y | 0) * MAP_W + (a.x | 0);
+    const c = cells.get(k);
+    if (c) c.push(i);
+    else cells.set(k, [i]);
+  }
+}
+
+const near: number[] = [];
+
+/** indices of the units on the 3x3 tiles around (x, y), as filed by indexBodies (ascending per tile) */
+export function bodiesNear(x: number, y: number): number[] {
+  near.length = 0;
+  const cx = x | 0;
+  const cy = y | 0;
+  for (let oy = -1; oy <= 1; oy++)
+    for (let ox = -1; ox <= 1; ox++) {
+      const c = cells.get((cy + oy) * MAP_W + cx + ox);
+      if (c) for (const j of c) near.push(j);
+    }
+  return near;
+}
+
+/**
+ * A foe of u fighting it hand to hand gets a free blow when u turns its back to walk away: the price
+ * of leaving a fight (see orderMove).
+ */
+export function partingBlows(u: Unit) {
+  if (u.dead) return;
+  for (const e of G.units) {
+    if (e.dead || e.tgt !== u.id || !melee(e) || !UNITS[e.type].dmg) continue;
+    if (!hostile(e.owner, u.owner)) continue;
+    if (dist(e.x, e.y, u.x, u.y) > UNITS[e.type].range) continue;
+    fire(e, u, PARTING);
+    if (u.dead) return;
   }
 }
 
@@ -188,14 +329,47 @@ export function acquireTarget(u: Unit) {
   if (u.ftgt) {
     const f = G.byId.get(u.ftgt);
     if (f && !f.dead) {
-      u.tgt = f.id;
+      let t: Entity = f;
+      // the ordered foe has all its sides taken by our troops: fight one beside it meanwhile
+      if (f.kind === 'u' && melee(u) && surrounded(u, f)) {
+        let bd = ASIDE;
+        for (const o of G.units) {
+          if (o.dead || o === f || !hostile(u.owner, o.owner)) continue;
+          if (Math.abs(o.x - f.x) > bd || Math.abs(o.y - f.y) > bd) continue;
+          const e = dist(o.x, o.y, f.x, f.y);
+          if (e < bd && !surrounded(u, o)) {
+            bd = e;
+            t = o;
+          }
+        }
+      }
+      if (u.tgt !== t.id) u.slot = -1;
+      u.tgt = t.id;
       return;
     }
     u.ftgt = 0;
   }
   const S = UNITS[u.type];
+  // a melee unit keeps the foe it fights or runs at while that foe is near: no hopping from one
+  // foe to another every scan (a chase that leads nowhere lapses in update)
+  // (unless it only waits behind a foe our troops already surround: then it looks a little farther
+  // for one with a side free)
+  let waiting = false;
+  if (u.tgt && melee(u)) {
+    const t = G.byId.get(u.tgt);
+    if (
+      t &&
+      !t.dead &&
+      t.kind === 'u' &&
+      hostile(u.owner, t.owner) &&
+      dist(t.x, t.y, u.x, u.y) < S.aggro * 1.7
+    ) {
+      if (u.slot >= 0 || !surrounded(u, t)) return;
+      waiting = true;
+    }
+  }
   let best = null;
-  let bd = S.aggro;
+  let bd = S.aggro + (waiting || joinsMates(u) ? WAIT_LOOK : 0);
 
   if (u.type === 'siege') {
     // artillery prefers buildings in range, never chases
@@ -227,7 +401,11 @@ export function acquireTarget(u: Unit) {
     if (e >= bd) continue;
     const crowd =
       (onTarget.get(o.id * SEATS + u.owner) ?? 0) - (u.tgt === o.id ? 1 : 0);
-    const sc = e + CROWD * crowd;
+    // (a foe none of ours fights yet has its sides free, barring the odd body in the way)
+    const sc =
+      e +
+      CROWD * crowd +
+      (crowd > 0 && melee(u) && surrounded(u, o) ? SURROUNDED : 0);
     if (sc < bs) {
       bs = sc;
       best = o;
@@ -258,6 +436,7 @@ export function acquireTarget(u: Unit) {
   }
   const had = u.tgt;
   u.tgt = best ? best.id : 0;
+  if (u.tgt !== had) u.slot = -1;
   if (had && !u.tgt && u.dest) {
     u.path = findPath(u.x | 0, u.y | 0, u.dest[0], u.dest[1]);
   }
@@ -305,10 +484,50 @@ export function hit(
   }
 }
 
-export function fire(u: Unit, t: Entity) {
+/** a free blow at a foe that turns its back on the fight */
+export const PARTING = 1.5;
+/** the first blow of a charge (after running at the foe at least CHARGE_RUN tiles) */
+const CHARGE = 1.5;
+const CHARGE_RUN = 1.5;
+/** blows at a foe's flank and at its back */
+const FLANK = 1.25;
+const REAR = 1.5;
+/** hand-to-hand fights between troops go this much faster than the plain numbers say */
+const MELEE_PACE = 1.25;
+/** soldiers of a squad that strike at full strength in melee; those behind them add half each */
+const FRONT_RANK = 3;
+
+/** soldiers whose blows count: in melee only the front rank strikes fully */
+export function strikers(u: Unit) {
+  const n = u.n || 1;
+  if (!melee(u)) return n;
+  return Math.min(n, FRONT_RANK) + 0.5 * Math.max(0, n - FRONT_RANK);
+}
+
+/** how much harder a melee blow of u lands on unit t: from its flank or its back, or as a charge */
+export function blowBonus(u: Unit, t: Unit) {
+  let m = 1;
+  if (u.chg >= CHARGE_RUN) m *= CHARGE;
+  const dx = u.x - t.x;
+  const dy = u.y - t.y;
+  const l = vecLen(dx, dy);
+  if (l > 1e-3) {
+    // which side of t u stands on, seen along the way t faces its fight
+    const [fx, fy] = frontOf(t);
+    const c = (dx * fx + dy * fy) / l;
+    if (c < -0.5) m *= REAR;
+    else if (c < 0.5) m *= FLANK;
+  }
+  return m;
+}
+
+export function fire(u: Unit, t: Entity, mult = 1) {
   const S = UNITS[u.type];
   if (!S.dmg) return;
-  let dmg = S.dmg * (u.n || 1) * (u.supplied ? 1 : 0.6);
+  let dmg = S.dmg * strikers(u) * (u.supplied ? 1 : 0.6) * mult;
+  if (t.kind === 'u' && melee(u) && t.type !== 'wagon')
+    dmg *= MELEE_PACE * blowBonus(u, t);
+  u.chg = 0;
   if (S.noAmmo) u.cd = S.cd * (0.9 + rand() * 0.2);
   else if (u.ammo >= 1) {
     u.ammo -= 1;

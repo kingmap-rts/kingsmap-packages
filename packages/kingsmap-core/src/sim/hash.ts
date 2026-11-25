@@ -50,6 +50,10 @@ export function stateHash(): string {
     num(u.n || 1);
     num(u.joinTo || 0);
     num(u.solo ? 1 : 0);
+    // which way a squad faces and the side of its foe it fights from decide flank blows
+    num(u.hx);
+    num(u.hy);
+    num(u.slot);
   }
   for (const bl of G.buildings) {
     num(bl.id);

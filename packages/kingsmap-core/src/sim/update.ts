@@ -26,15 +26,21 @@ import {
 import { G } from './state';
 import {
   acquireTarget,
-  attackSpot,
+  bodiesNear,
+  bodyR,
   countTargets,
   fire,
   hit,
+  indexBodies,
   kill,
+  melee,
+  sideSpot,
+  takeSide,
+  touch,
 } from './systems/combat';
 import { diploTick, hostile } from './systems/diplomacy';
 import { banditLoot, sendCaravan, wagonTick } from './systems/logistics';
-import { followPath, moveToward } from './systems/movement';
+import { followPath, moveToward, turn } from './systems/movement';
 import { recomputeNetwork } from './systems/network';
 import { findPath } from './systems/pathfinding';
 import { fireRainTick } from './systems/paths';
@@ -273,6 +279,9 @@ export function update(dt: number) {
       t = null;
       u.tgt = 0;
       u.ftgt = 0;
+      u.slot = -1;
+      u.chg = 0;
+      u.chT = 0;
       if (u.dest) u.path = findPath(u.x | 0, u.y | 0, u.dest[0], u.dest[1]);
     }
     if (t) {
@@ -280,9 +289,12 @@ export function update(dt: number) {
       const ty = centerY(t);
       const d = dist(u.x, u.y, tx, ty);
       const rr = S.range + (t.kind === 'b' ? 0.45 : 0);
-      if (d <= rr) {
-        if (u.cd <= 0 && (!S.deploy || u.deployT >= deployTime(u))) fire(u, t);
+      const ready = u.cd <= 0 && (!S.deploy || u.deployT >= deployTime(u));
+      if (t.kind === 'u' && melee(u)) meleeStep(u, t, d, SPD, dt, ready);
+      else if (d <= rr) {
+        if (ready) fire(u, t);
         u.ang = Math.atan2(ty - u.y, tx - u.x);
+        if (d > 1e-3) turn(u, (tx - u.x) / d, (ty - u.y) / d);
       } else if (u.ftgt) {
         if (d > 3) {
           u.repath -= dt;
@@ -291,19 +303,21 @@ export function update(dt: number) {
             u.path = findPath(u.x | 0, u.y | 0, tx | 0, ty | 0);
           }
           followPath(u, SPD, dt);
-        } else if (t.kind === 'u') moveToward(u, ...attackSpot(u, t), SPD, dt);
-        else moveToward(u, tx, ty, SPD, dt);
+        } else moveToward(u, tx, ty, SPD, dt);
         chasing.add(u.id);
       } else if (d < S.aggro * 1.7 && u.type !== 'siege') {
-        if (t.kind === 'u') moveToward(u, ...attackSpot(u, t), SPD, dt);
-        else moveToward(u, tx, ty, SPD, dt);
+        moveToward(u, tx, ty, SPD, dt);
         chasing.add(u.id);
       } else {
         u.tgt = 0;
         if (u.dest) u.path = findPath(u.x | 0, u.y | 0, u.dest[0], u.dest[1]);
       }
     } else if (u.path && u.path.length) {
-      if (followPath(u, SPD, dt) && u.order === 'move') u.order = 'amove';
+      // a group march: at the group's pace, so its units arrive together
+      if (followPath(u, SPD * (u.order ? u.gsp : 1), dt)) {
+        u.gsp = 1;
+        if (u.order === 'move') u.order = 'amove';
+      }
     }
     if (u.type === 'raid') banditLoot(u, dt);
     if (u.type === 'wagon') wagonTick(u, dt);
@@ -316,6 +330,7 @@ export function update(dt: number) {
       continue;
     }
     if (u.type === 'arsonist') arsonTick(u, dt);
+    const moved = u.mv;
     u.mv = 0;
     // bandits live off the land: no losses without supply (they still neither heal nor refill arrows)
     if (!u.supplied) {
@@ -326,7 +341,8 @@ export function update(dt: number) {
         continue;
       }
     } else {
-      if (G.t - u.lastHit > 3 && u.hp < u.maxhp)
+      // wounds heal at rest: not while marching or running from a fight
+      if (!moved && G.t - u.lastHit > 3 && u.hp < u.maxhp)
         u.hp = Math.min(u.maxhp, u.hp + 0.8 * (u.n || 1) * dt);
       const w = u.supBy ? (G.byId.get(u.supBy) as Unit | undefined) : null;
       if (w && !w.dead && w.cargo)
@@ -354,46 +370,7 @@ export function update(dt: number) {
       }
     }
   }
-  // separation
-  const us = G.units;
-  for (let i = 0; i < us.length; i++) {
-    const a = us[i];
-    if (a.dead) continue;
-    for (let j = i + 1; j < us.length; j++) {
-      const b = us[j];
-      if (b.dead) continue;
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const rr = (a.n > 1 ? 0.5 : 0.275) + (b.n > 1 ? 0.5 : 0.275);
-      if (Math.abs(dx) > rr || Math.abs(dy) > rr) continue;
-      const d = vecLen(dx, dy) || 0.01;
-      if (d < rr) {
-        const push = ((rr - d) * 0.5) / d;
-        let px = dx * push;
-        let py = dy * push;
-        if (
-          (a.path && a.path.length && b.path && b.path.length) ||
-          chasing.has(a.id) ||
-          chasing.has(b.id)
-        ) {
-          // both are walking, or one runs at a foe: push a little sideways too, so two units
-          // meeting head-on step around each other, and an attacker stuck behind its own troops
-          // slips past them to the enemy instead of shoving them from behind
-          const rx = px * SIDESTEP_C - py * SIDESTEP_S;
-          py = py * SIDESTEP_C + px * SIDESTEP_S;
-          px = rx;
-        }
-        if (walkable((a.x - px) | 0, (a.y - py) | 0)) {
-          a.x -= px;
-          a.y -= py;
-        }
-        if (walkable((b.x + px) | 0, (b.y + py) | 0)) {
-          b.x += px;
-          b.y += py;
-        }
-      }
-    }
-  }
+  separate();
   for (const s of G.shots) s.t -= dt;
   G.shots = G.shots.filter(s => s.t > 0);
   for (const f of G.fx) f.t += dt;
@@ -417,5 +394,163 @@ export function update(dt: number) {
   if (G.buildings.some(b => b.dead)) {
     for (const b of G.buildings) if (b.dead) G.byId.delete(b.id);
     G.buildings = G.buildings.filter(b => !b.dead);
+  }
+}
+
+/** a chase without an attack order lapses after this many seconds without a blow */
+const GIVE_UP = 2.5;
+
+/** a melee unit this close to its foe (beyond shoulder to shoulder) stands and fights, tiles */
+const CLOSE = 0.25;
+
+/** a blow takes this long: the striker stands meanwhile, seconds */
+const SWING = 0.3;
+
+/** a unit whose foe has every side taken waits this far behind the ones fighting, tiles */
+const WAIT = 1;
+
+/**
+ * A melee unit and its unit foe: run to a free side of it (front, a flank, the rear), stand there
+ * shoulder to shoulder and strike; follow it when it steps away, striking on the run (more slowly);
+ * give the chase up when it leads nowhere and nobody ordered it.
+ */
+function meleeStep(
+  u: Unit,
+  t: Unit,
+  d: number,
+  spd: number,
+  dt: number,
+  ready: boolean,
+) {
+  const S = UNITS[u.type];
+  if (!u.ftgt && d >= S.aggro * 1.7) {
+    dropTarget(u);
+    return;
+  }
+  const x0 = u.x;
+  const y0 = u.y;
+  const close = d <= touch(u, t) + CLOSE;
+  // just after a blow the arm is still swinging: the unit stands (so a foe that walks off gains on it)
+  const swinging = u.cd > S.cd * 0.9 - SWING;
+  if (swinging) {
+    // stays where it is
+  } else if (u.ftgt && d > 3) {
+    // far off: walk round whatever stands in the way
+    u.repath -= dt;
+    if (!u.path || !u.path.length || u.repath <= 0) {
+      u.repath = 1.5;
+      u.path = findPath(u.x | 0, u.y | 0, t.x | 0, t.y | 0);
+    }
+    followPath(u, spd, dt);
+  } else if (!close) {
+    const k = takeSide(u, t);
+    u.slot = k;
+    if (k >= 0) moveToward(u, ...sideSpot(u, t, k), spd, dt);
+    else {
+      // every side is taken: wait just behind, ready to step in
+      const r = touch(u, t) + WAIT;
+      if (d > r + 0.1)
+        moveToward(
+          u,
+          t.x + ((u.x - t.x) / d) * r,
+          t.y + ((u.y - t.y) / d) * r,
+          spd,
+          dt,
+        );
+    }
+  } else if (u.slot < 0) u.slot = takeSide(u, t);
+  const run = dist(x0, y0, u.x, u.y);
+  if (run > 0) {
+    chasing.add(u.id);
+    u.chg += run;
+  }
+  const nd = dist(u.x, u.y, t.x, t.y);
+  if (nd <= S.range) {
+    if (nd > 1e-3) turn(u, (t.x - u.x) / nd, (t.y - u.y) / nd);
+    u.ang = Math.atan2(t.y - u.y, t.x - u.x);
+    if (ready) {
+      fire(u, t);
+    }
+  }
+  // running after a foe that walks away and keeps out of reach (one waiting for a side to free, or
+  // squeezing past bodies to a foe that stands, is not chasing)
+  if (nd > S.range && run > 0 && u.slot >= 0 && t.path && t.path.length)
+    u.chT += dt;
+  else if (nd <= S.range) u.chT = 0;
+  if (!u.ftgt && u.chT > GIVE_UP) {
+    dropTarget(u);
+    // and do not take the same chase up again at once
+    u.scan = 2;
+  }
+}
+
+function dropTarget(u: Unit) {
+  u.tgt = 0;
+  u.slot = -1;
+  u.chg = 0;
+  u.chT = 0;
+  if (u.dest) u.path = findPath(u.x | 0, u.y | 0, u.dest[0], u.dest[1]);
+}
+
+/** how readily a unit gives way when two bump: one standing about steps aside for one on its way, and
+ * one fighting holds its ground */
+function give(u: Unit) {
+  if (u.tgt && !u.mv && !(u.path && u.path.length)) return 0.3;
+  if ((u.path && u.path.length) || chasing.has(u.id)) return 0.6;
+  return 1;
+}
+
+/**
+ * Bodies keep apart. Friends slip past each other (two walking head-on step round, an attacker
+ * slips past its own troops to the foe); foes do not pass through each other, they meet. A unit's
+ * neighbours come from the tiles around it, so this stays cheap with hundreds of units.
+ */
+function separate() {
+  const us = G.units;
+  indexBodies();
+  const near: number[] = [];
+  for (let i = 0; i < us.length; i++) {
+    const a = us[i];
+    if (a.dead) continue;
+    near.length = 0;
+    for (const j of bodiesNear(a.x, a.y)) if (j > i) near.push(j);
+    near.sort((p, q) => p - q);
+    for (const j of near) {
+      const b = us[j];
+      if (b.dead) continue;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const rr = bodyR(a) + bodyR(b);
+      if (Math.abs(dx) > rr || Math.abs(dy) > rr) continue;
+      const d = vecLen(dx, dy) || 0.01;
+      if (d >= rr) continue;
+      const foes = hostile(a.owner, b.owner);
+      const ga = foes ? 1 : give(a);
+      const gb = foes ? 1 : give(b);
+      const push = (rr - d) / d / (ga + gb);
+      let px = dx * push;
+      let py = dy * push;
+      if (
+        !foes &&
+        ((a.path && a.path.length && b.path && b.path.length) ||
+          chasing.has(a.id) ||
+          chasing.has(b.id))
+      ) {
+        // both are walking, or one runs at a foe: push a little sideways too, so two units
+        // meeting head-on step around each other, and an attacker stuck behind its own troops
+        // slips past them to the enemy instead of shoving them from behind
+        const rx = px * SIDESTEP_C - py * SIDESTEP_S;
+        py = py * SIDESTEP_C + px * SIDESTEP_S;
+        px = rx;
+      }
+      if (walkable((a.x - px * ga) | 0, (a.y - py * ga) | 0)) {
+        a.x -= px * ga;
+        a.y -= py * ga;
+      }
+      if (walkable((b.x + px * gb) | 0, (b.y + py * gb) | 0)) {
+        b.x += px * gb;
+        b.y += py * gb;
+      }
+    }
   }
 }

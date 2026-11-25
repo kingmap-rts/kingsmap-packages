@@ -100,7 +100,8 @@ describe('movement', () => {
           if (!off.has(u.id) && !(u.path && u.path.length))
             off.set(
               u.id,
-              Math.hypot(u.x - u.dest![0] - 0.5, u.y - u.dest![1] - 0.5),
+              // a group march ends at the unit's own place in the ranks
+              Math.hypot(u.x - u.end![0], u.y - u.end![1]),
             );
       }
       expect(off.size).toBe(us.length);

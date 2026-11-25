@@ -44,8 +44,12 @@ function battle(
   const them: Unit[] = [];
   for (let i = 0; i < ours; i++)
     mine.push(squad(0, bx + 2 + (i % 3) * 1.1, by + 4 + ((i / 3) | 0) * 1.1));
-  for (let i = 0; i < foes; i++)
-    them.push(squad(1, bx + 10, by + 4.5 + i * gap));
+  for (let i = 0; i < foes; i++) {
+    const t = squad(1, bx + 10, by + 4.5 + i * gap);
+    // flank and charge blows of several squads can fell a squad within one tick: make them unbreakable
+    t.maxhp = t.hp = 1e6;
+    them.push(t);
+  }
   const ids = mine.map(u => u.id);
   if (how === 'attack') game.apply(0, { t: 'attack', ids, target: them[0].id });
   else
@@ -69,7 +73,7 @@ function battle(
       if (u.cd > cd[k] + 0.05) hits.set(u.id, (hits.get(u.id) ?? 0) + 1);
     });
   }
-  return { hits: mine.map(u => hits.get(u.id) ?? 0), mine };
+  return { hits: mine.map(u => hits.get(u.id) ?? 0), mine, them };
 }
 
 describe('combat', () => {
@@ -79,14 +83,26 @@ describe('combat', () => {
     for (const h of hits) expect(h).toBeGreaterThan(5);
   });
 
-  it('attack-moving squads all reach a foe, none stuck behind its own troops', () => {
-    // 10 squads on 2 foes used to leave three of them without a single blow
-    const { hits } = battle(10, 2, 'amove');
-    for (const h of hits) expect(h).toBeGreaterThan(10);
+  it('attack-moving squads take the open sides of each foe, the rest wait close behind', () => {
+    // 10 squads on 2 foes standing side by side: a foe has a front, two flanks and a rear, one squad
+    // on each, but the flank toward its neighbour is the neighbour's place
+    const { hits, mine, them } = battle(10, 2, 'amove');
+    expect(hits.filter(h => h > 10).length).toBeGreaterThanOrEqual(6);
+    for (const t of them) {
+      const on = mine.filter(u => u.tgt === t.id && u.slot >= 0);
+      expect(new Set(on.map(u => u.slot)).size).toBeGreaterThanOrEqual(3);
+    }
+    // the ones left over stand ready next to the fight, not stuck far behind their own troops
+    for (const u of mine) {
+      const d = Math.min(...them.map(t => Math.hypot(t.x - u.x, t.y - u.y)));
+      expect(d).toBeLessThan(2.6);
+    }
   });
 
   it('attack-moving squads spread over the foes instead of queueing for the nearest', () => {
-    const { mine } = battle(10, 4, 'amove', 2);
-    expect(new Set(mine.map(u => u.tgt)).size).toBe(4);
+    const { mine, them } = battle(10, 4, 'amove', 2);
+    // (one may strike a building of the foe's nearby instead)
+    const on = mine.map(u => u.tgt).filter(id => them.some(t => t.id === id));
+    expect(new Set(on).size).toBe(4);
   });
 });

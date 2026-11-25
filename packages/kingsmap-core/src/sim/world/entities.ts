@@ -85,6 +85,13 @@ export function addUnit(type: UnitType, owner: number, x: number, y: number) {
     job: null,
     jobUntil: 0,
     ang: 0,
+    hx: 0,
+    hy: 1,
+    slot: -1,
+    chg: 0,
+    chT: 0,
+    gsp: 1,
+    end: null,
   };
   if (type === 'raid' && hasPerk(G.players[owner], 'tough')) {
     u.hp *= 1.25;

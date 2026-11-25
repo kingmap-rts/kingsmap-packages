@@ -85,6 +85,25 @@ export interface Unit extends EntityBase {
   jobUntil: number;
   /** facing angle, render only */
   ang: number;
+  /**
+   * which way the squad faces, a unit vector (simulation: the front, flanks and rear of a squad;
+   * renderers lay its ranks out along it)
+   */
+  hx: number;
+  hy: number;
+  /**
+   * side of its melee foe this unit fights from or heads for: 0 front, 1 left flank, 2 right flank,
+   * 3 rear (seen from the foe), -1 none
+   */
+  slot: number;
+  /** tiles run at the foe since the last blow: a charge lands its first blow harder */
+  chg: number;
+  /** seconds spent running after a foe without striking it (a chase without an order lapses) */
+  chT: number;
+  /** pace of this unit on a group march, a share of its speed: the group arrives together */
+  gsp: number;
+  /** exact point a march ends at (tiles), so a group stops in tidy ranks; null: its last tile's centre */
+  end: Tile | null;
   /** summoned units disappear at this world time */
   expire?: number;
   trapT?: number;
