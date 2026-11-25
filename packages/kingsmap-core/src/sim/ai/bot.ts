@@ -1,5 +1,11 @@
 /** Bot brain: specialise, expand, hire, defend and raid. */
-import type { Building, Player, SpecType, UnitType } from '../world/types';
+import type {
+  Building,
+  Player,
+  SpecType,
+  Unit,
+  UnitType,
+} from '../world/types';
 import { campaign } from './campaign';
 import { botDiplomacy } from './diplomacy';
 import { botMarket } from './market';
@@ -11,6 +17,7 @@ import {
   specialize,
   train,
 } from '../commands/build';
+import { ASSAULT_R, OBJECTIVE_R } from '../config/ai';
 import { BUILDINGS } from '../config/buildings';
 import { Deposit, Terrain } from '../config/map';
 import { POST_RADIUS, ROAD_LEN } from '../config/network';
@@ -30,6 +37,39 @@ import {
   isDepot,
   nearestLinkedDepot,
 } from '../world/entities';
+
+/**
+ * Troops never attack buildings by themselves (KAN-41): the bot's assault troops (a wave, or the
+ * campaign group) that stand idle next to an enemy post, or near a castle or the group's objective, are ordered
+ * to attack it and keep their job. A cut-off post is left alone: standing by it takes it whole
+ * (captureTick). Trebuchets shell buildings in range by themselves.
+ */
+function assault(p: Player, army: Unit[]) {
+  const goal = p.ai.gT ? G.byId.get(p.ai.gT) : null;
+  for (const u of army) {
+    if (u.job !== 'wave' && u.job !== 'push') continue;
+    if (u.tgt || u.ftgt || u.type === 'wagon' || u.type === 'siege') continue;
+    if (u.path && u.path.length) continue;
+    let tb: Building | null = null;
+    let bd = ASSAULT_R;
+    for (const b of G.buildings) {
+      if (b.dead || !hostile(p.id, b.owner) || !b.linked) continue;
+      let e = dist(b.x + 0.5, b.y + 0.5, u.x, u.y);
+      // the group's objective and a castle count as nearer: the back ranks of a group join the
+      // attack on them instead of standing behind the front
+      if (b === goal || b.type === 'hq') e *= ASSAULT_R / OBJECTIVE_R;
+      if (e < bd) {
+        bd = e;
+        tb = b;
+      }
+    }
+    if (!tb) continue;
+    const { job, jobUntil } = u;
+    orderAttack([u], tb);
+    u.job = job;
+    u.jobUntil = jobUntil;
+  }
+}
 
 export function botTick(p: Player) {
   const my = G.buildings.filter(b => !b.dead && b.owner === p.id);
@@ -240,6 +280,7 @@ export function botTick(p: Player) {
     }
   }
   botPaths(p, army, threat, td);
+  assault(p, army);
   if (P.ai2) campaign(p, army, idle, idleInf, enemies, threat, td);
   else if (G.t > p.ai.waveAt && soldierCount(idleInf) >= p.ai.wave && foe) {
     let tb = null;

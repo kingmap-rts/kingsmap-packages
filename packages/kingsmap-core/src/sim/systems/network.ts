@@ -17,6 +17,7 @@ import { claimRadius, hasPerk, roadLength, siteWorkers } from '../modifiers';
 import { G, matchState, depositMap, sites, terrainMap } from '../state';
 import { captureTick } from './capture';
 import { hostile, supplyDeps } from './diplomacy';
+import { roadTiles } from './roads';
 import { builderTick, sabotageTick } from './sabotage';
 import { dist, tileIndex, segmentDist } from '../util/geometry';
 import { isDepot, linkKey } from '../world/entities';
@@ -60,11 +61,13 @@ export function linkBlocked(
   return { blocked: foe > 0 && foe > fr, by: cutter };
 }
 
-export function computeTerritory() {
-  // territory
-  // first come, first served: buildings claim land oldest first, and a newer post never takes land that already
-  // belongs to another kingdom, its land simply flows around the border. Between your own posts the nearest wins.
-  const own = G.own;
+/**
+ * Who holds each tile, from the posts that are linked now (fills `own` and `tdep`). First come,
+ * first served: buildings claim land oldest first, and a newer post never takes land that already
+ * belongs to another kingdom, its land simply flows around the border. Between your own posts the
+ * nearest wins. Pure: reads only the buildings.
+ */
+export function claimLand(own: Int8Array, tdep: Int32Array) {
   own.fill(-1);
   const best = new Float32Array(TILES).fill(1e9);
   const claim = G.buildings
@@ -86,16 +89,21 @@ export function computeTerritory() {
         if (d2 < best[k]) {
           best[k] = d2;
           own[k] = b.owner;
-          G.tdep[k] = b.id;
+          tdep[k] = b.id;
         }
       }
   }
   for (const b of G.buildings) {
     if (!b.dead && isDepot(b) && b.linked) {
       own[tileIndex(b.x, b.y)] = b.owner;
-      G.tdep[tileIndex(b.x, b.y)] = b.id;
+      tdep[tileIndex(b.x, b.y)] = b.id;
     }
   }
+}
+
+export function computeTerritory() {
+  const own = G.own;
+  claimLand(own, G.tdep);
   for (const b of G.buildings) {
     if (!b.dead && isDepot(b)) for (const k of RESOURCES) b.yld[k] = 0;
   }
@@ -150,21 +158,76 @@ export function computeTerritory() {
   return own;
 }
 
+/** scratch territory of the first pass (see recomputeNetwork) */
+let land0: Int8Array | null = null;
+let land0Dep: Int32Array | null = null;
+
+/**
+ * The first hostile seat whose land the road a–b runs through for `owner` (by `own`), or -1.
+ * Allied land never cuts. The road is the one the map draws (roads.ts), tile by tile.
+ */
+export function roadLandCut(
+  a: Building,
+  b: Building,
+  owner: number,
+  own: Int8Array = G.own,
+): number {
+  const tiles = roadTiles(terrainMap, a.x, a.y, b.x, b.y);
+  for (let i = 0; i < tiles.length; i++) {
+    const o = own[tiles[i]];
+    if (o >= 0 && hostile(owner, o)) return o;
+  }
+  return -1;
+}
+
+/** links each realm's posts from its castle along the open roads (sets linked and hop) */
+function linkFromCastle(ds: Building[], ward: boolean) {
+  for (const b of ds) {
+    b.linked = false;
+    b.hop = 99;
+  }
+  const h = ds.find(b => b.type === 'hq');
+  if (!h) return; // no castle: nothing is linked, not even by a road ward
+  h.linked = true;
+  h.hop = 0;
+  const q = [h];
+  let qi = 0;
+  while (qi < q.length) {
+    const a = q[qi++];
+    for (const { nb } of a.adj)
+      if (!nb.linked) {
+        nb.linked = true;
+        nb.hop = a.hop + 1;
+        q.push(nb);
+      }
+  }
+  if (ward)
+    for (const b of ds)
+      if (!b.linked) {
+        b.linked = true;
+        b.hop = 50;
+      }
+}
+
 export function recomputeNetwork() {
   captureTick(0.4);
   sabotageTick(0.4);
   builderTick();
   G.links = [];
   const deps = Array.from({ length: SEATS }, (): Building[] => []);
+  const wasLinked = new Set<number>();
   for (const b of G.buildings) {
     if (b.dead) continue;
     if (isDepot(b)) {
+      if (b.linked) wasLinked.add(b.id);
       b.linked = false;
       b.adj = [];
       b.hop = 99;
       deps[b.owner].push(b);
     }
   }
+  // first pass: roads cut only by troops and fire, as before
+  const guarded: boolean[] = []; // per link: a road ward or a king's highway, nothing cuts it
   for (const p of G.players) {
     if (!p.alive) continue;
     const ds = deps[p.id];
@@ -175,43 +238,64 @@ export function recomputeNetwork() {
         if (dist(a.x, a.y, b.x, b.y) <= roadLength(p)) {
           const key = linkKey(a, b);
           // a road ward or a king's highway cannot be cut
-          const cut =
-            p.wardUntil > G.t || (G.royal.get(key) || 0) > G.t
-              ? null
-              : linkBlocked(a, b, p.id);
+          const safe = p.wardUntil > G.t || (G.royal.get(key) || 0) > G.t;
+          const cut = safe ? null : linkBlocked(a, b, p.id);
           const bl = cut ? cut.blocked : false;
           if (cut && cut.blocked) {
             p.stats.cutSuffer += 0.4;
             if (cut.by >= 0) G.players[cut.by].stats.cutInflict += 0.4;
           }
           G.links.push({ a, b, owner: p.id, blocked: bl, key });
+          guarded.push(safe);
           if (!bl) {
             a.adj.push({ nb: b, key });
             b.adj.push({ nb: a, key });
           }
         }
       }
-    const h = ds.find(b => b.type === 'hq');
-    if (!h) continue;
-    h.linked = true;
-    h.hop = 0;
-    const q = [h];
-    let qi = 0;
-    while (qi < q.length) {
-      const a = q[qi++];
-      for (const { nb } of a.adj)
-        if (!nb.linked) {
-          nb.linked = true;
-          nb.hop = a.hop + 1;
-          q.push(nb);
-        }
+    linkFromCastle(ds, p.wardUntil > G.t);
+  }
+  // second pass: a road through a hostile kingdom's land is cut too. The land is the one these
+  // links would give (the first pass), never last turn's: the result depends on this moment only,
+  // so it cannot flicker (cut → land shrinks → open → land grows → cut) from one turn to the next.
+  if (!land0 || !land0Dep) {
+    land0 = new Int8Array(TILES);
+    land0Dep = new Int32Array(TILES);
+  }
+  claimLand(land0, land0Dep);
+  const linked0 = new Set<number>();
+  for (const ds of deps) for (const b of ds) if (b.linked) linked0.add(b.id);
+  const landBy = new Array(SEATS).fill(-1);
+  let anyCut = false;
+  for (let i = 0; i < G.links.length; i++) {
+    const l = G.links[i];
+    if (l.blocked || guarded[i]) continue;
+    const by = roadLandCut(l.a, l.b, l.owner, land0);
+    if (by < 0) continue;
+    l.blocked = true;
+    anyCut = true;
+    if (landBy[l.owner] < 0) landBy[l.owner] = by;
+  }
+  if (anyCut) {
+    for (const ds of deps) for (const b of ds) b.adj = [];
+    for (const l of G.links)
+      if (!l.blocked) {
+        l.a.adj.push({ nb: l.b, key: l.key });
+        l.b.adj.push({ nb: l.a, key: l.key });
+      }
+    for (const p of G.players) {
+      if (!p.alive || landBy[p.id] < 0) continue;
+      linkFromCastle(deps[p.id], p.wardUntil > G.t);
+      // posts this road cut just took off the network
+      let lost = 0;
+      for (const b of deps[p.id])
+        if (!b.linked && linked0.has(b.id) && wasLinked.has(b.id)) lost++;
+      if (lost && G.t > 1)
+        notify(
+          p.id,
+          msg('notice.roadThroughLand', { owner: landBy[p.id], amount: lost }),
+        );
     }
-    if (p.wardUntil > G.t)
-      for (const b of ds)
-        if (!b.linked) {
-          b.linked = true;
-          b.hop = 50;
-        }
   }
   const own = computeTerritory();
   // population stats

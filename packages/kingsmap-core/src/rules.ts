@@ -14,6 +14,9 @@ export {
   HQ_RADIUS,
   POST_RADIUS,
   CAPTURE_TIME,
+  CAPTURE_HOLD_TIME,
+  CAPTURERS,
+  CAPTURE_R,
   ARSON_TIME,
   BURN_TIME,
   BURN_IMMUNITY,
@@ -84,6 +87,9 @@ export {
   nodeCost,
 } from './sim/config/paths';
 export { nodeRefusal } from './sim/systems/paths';
+// where a road runs (the map draws it along this route) and whose land cuts it
+export { roadRoute, roadTiles, type RoadPt } from './sim/systems/roads';
+export { roadLandCut } from './sim/systems/network';
 export { unitUnlocked } from './sim/modifiers';
 
 // ---- pure helpers ----
@@ -108,4 +114,10 @@ export {
   buildCost,
 } from './sim/modifiers';
 export { squadSize, soldierCount } from './sim/systems/squads';
+export {
+  capturer,
+  takeable,
+  canCapture,
+  captureTime,
+} from './sim/systems/capture';
 export { canAfford } from './sim/commands/build';

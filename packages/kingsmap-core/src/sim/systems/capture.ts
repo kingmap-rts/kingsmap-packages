@@ -1,12 +1,37 @@
-/** Capturing cut-off posts. */
-import type { Building } from '../world/types';
+/**
+ * Capturing posts. A post cut off from its castle falls to any enemy troops that stand next to it
+ * alone for CAPTURE_TIME. A post still linked (a store, a forge, barracks) falls only to foot soldiers
+ * ordered to capture it (the `capture` intent), after CAPTURE_HOLD_TIME. A fort is taken only when
+ * cut off; the castle never. Capturing never damages the post.
+ */
+import type { Building, UnitType } from '../world/types';
 import { COLORS } from '../config/map';
-import { CAPTURE_TIME } from '../config/network';
+import {
+  CAPTURE_HOLD_TIME,
+  CAPTURE_R,
+  CAPTURE_TIME,
+  CAPTURERS,
+} from '../config/network';
 import { G } from '../state';
 import { hostile } from './diplomacy';
 import { dist } from '../util/geometry';
 import { goodsTotal } from '../util/resources';
 import { logEvent, msg, notify } from '../world/events';
+
+/** a unit that can take a linked post: a foot soldier */
+export const capturer = (u: { type: UnitType }) => CAPTURERS.includes(u.type);
+
+/** a post that can be taken at all (who may take it: canCapture): never the castle, a fort only when cut off */
+export const takeable = (b: Building) =>
+  b.type === 'depot' && (!b.linked || b.spec !== 'fort');
+
+/** can these units be ordered to take post b (whoever owns it): a linked one needs a foot soldier */
+export const canCapture = (b: Building, units: readonly { type: UnitType }[]) =>
+  takeable(b) && (!b.linked || units.some(capturer));
+
+/** seconds post b holds out against its captors */
+export const captureTime = (b: Building) =>
+  b.linked ? CAPTURE_HOLD_TIME : CAPTURE_TIME;
 
 export function capture(b: Building, pid: number) {
   const old = b.owner;
@@ -40,24 +65,30 @@ export function capture(b: Building, pid: number) {
 export function captureTick(dt: number) {
   for (const b of G.buildings) {
     if (b.dead || b.type !== 'depot') continue;
-    if (b.linked) {
+    if (!takeable(b)) {
       b.cap = 0;
       b.capBy = -1;
       continue;
     }
+    // a linked post: only foot soldiers under the order to take it count (others pass by)
+    const held = b.linked;
     let foe = -1;
     let mixed = false;
     let defended = false;
     for (const u of G.units) {
       if (u.dead) continue;
-      if (Math.abs(u.x - b.x - 0.5) > 2.2 || Math.abs(u.y - b.y - 0.5) > 2.2)
+      if (
+        Math.abs(u.x - b.x - 0.5) > CAPTURE_R ||
+        Math.abs(u.y - b.y - 0.5) > CAPTURE_R
+      )
         continue;
-      if (dist(u.x, u.y, b.x + 0.5, b.y + 0.5) > 2.2) continue;
+      if (dist(u.x, u.y, b.x + 0.5, b.y + 0.5) > CAPTURE_R) continue;
       if (u.owner === b.owner) {
         defended = true;
         break;
       }
       if (!hostile(b.owner, u.owner)) continue;
+      if (held && (u.capB !== b.id || !capturer(u))) continue;
       if (foe === -1) foe = u.owner;
       else if (foe !== u.owner) mixed = true;
     }
@@ -70,6 +101,6 @@ export function captureTick(dt: number) {
       b.cap = 0;
     }
     b.cap += dt;
-    if (b.cap >= CAPTURE_TIME) capture(b, foe);
+    if (b.cap >= captureTime(b)) capture(b, foe);
   }
 }

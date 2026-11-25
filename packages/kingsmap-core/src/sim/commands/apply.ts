@@ -26,6 +26,7 @@ import {
 import { trade } from '../systems/market';
 import { orderAttack, orderCapture, orderMove } from '../systems/movement';
 import { capturable } from '../systems/combat';
+import { canCapture } from '../systems/capture';
 import { cast, choosePath, pickPerk } from '../systems/paths';
 import { formSquads, unsquad } from '../systems/squads';
 import { canHire } from '../world/entities';
@@ -62,7 +63,9 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       if (!e || e.dead || e.owner === seat) return null;
       if (!hostile(seat, e.owner)) return msg('error.ally');
       if (!capturable(e, seat)) return msg('error.notCapturable');
-      orderCapture(mine(c.ids), e);
+      const us = mine(c.ids);
+      if (us.length && !canCapture(e, us)) return msg('error.captureFoot');
+      orderCapture(us, e);
       return null;
     }
     case 'stop':

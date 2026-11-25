@@ -179,9 +179,10 @@ export function squadTick() {
     }
     if (!u.path || !u.path.length) walkTo(u, t);
   }
-  // idle free soldiers find a mate of their type nearby
+  // idle free soldiers of a bot find a mate of their type nearby; a human
+  // player's soldiers stay single until grouped by hand (formSquads)
   for (const p of G.players) {
-    if (!p.alive || (p.ai && p.ai.P && p.ai.P.noSquad)) continue;
+    if (!p.alive || !p.bot || (p.ai && p.ai.P && p.ai.P.noSquad)) continue;
     const free = G.units.filter(
       u =>
         !u.dead &&

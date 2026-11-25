@@ -8,6 +8,7 @@ import { G } from '../state';
 import { hostile } from './diplomacy';
 import { findPath } from './pathfinding';
 import { memberLoss } from './squads';
+import { takeable } from './capture';
 import { dist, segmentDist, tileIndex, vecLen } from '../util/geometry';
 import { walkable } from '../world/terrain';
 import { rand } from '../util/rng';
@@ -303,15 +304,10 @@ export function partingBlows(u: Unit) {
   }
 }
 
-/** a post that troops can still be ordered to capture from seat */
+/** a post that troops can still be ordered to capture from seat (whether these troops may: canCapture) */
 export function capturable(b: Entity | undefined, seat: number): b is Building {
   return (
-    !!b &&
-    !b.dead &&
-    b.kind === 'b' &&
-    b.type === 'depot' &&
-    !b.linked &&
-    hostile(seat, b.owner)
+    !!b && !b.dead && b.kind === 'b' && takeable(b) && hostile(seat, b.owner)
   );
 }
 
@@ -372,7 +368,8 @@ export function acquireTarget(u: Unit) {
   let bd = S.aggro + (waiting || joinsMates(u) ? WAIT_LOOK : 0);
 
   if (u.type === 'siege') {
-    // artillery prefers buildings in range, never chases
+    // artillery prefers buildings in range, never chases: a trebuchet is a siege engine, it shells
+    // the enemy buildings it stands in range of by itself (but never the post it was sent to capture)
     let bb = null;
     let bdd = S.range + 0.4;
     for (const b of G.buildings) {
@@ -423,17 +420,8 @@ export function acquireTarget(u: Unit) {
       }
     }
   }
-  if (!best) {
-    bd = 2.6;
-    for (const b of G.buildings) {
-      if (b.dead || b.id === u.capB || !hostile(u.owner, b.owner)) continue;
-      const e = dist(b.x + 0.5, b.y + 0.5, u.x, u.y);
-      if (e < bd) {
-        bd = e;
-        best = b;
-      }
-    }
-  }
+  // (troops never pick a building by themselves: only the attack order sends them at one, ftgt above;
+  // the siege engines are the exception, see above)
   const had = u.tgt;
   u.tgt = best ? best.id : 0;
   if (u.tgt !== had) u.slot = -1;

@@ -1,4 +1,5 @@
 /** Roads and territory: link length, claim radii, capture and sabotage timings. */
+import type { UnitType } from '@kingmap-rts/kingsmap-types';
 
 export const ROAD_LEN = 9;
 
@@ -8,7 +9,21 @@ export const POST_RADIUS = 6;
 
 export const ROAD_GAP = 0;
 
+/** seconds a cut-off post holds out while only enemy troops (any of them) stand next to it */
 export const CAPTURE_TIME = 4;
+
+/**
+ * seconds a post still linked to its castle (a store, a forge, barracks; never a fort or the castle)
+ * holds out against foot soldiers ordered to capture it, with none of its owner's troops nearby:
+ * three times a cut-off post, the price of taking a supplied post without cutting its road first
+ */
+export const CAPTURE_HOLD_TIME = 12;
+
+/** the units that can take a linked post (foot soldiers); a cut-off post falls to anyone */
+export const CAPTURERS: readonly UnitType[] = ['inf', 'militia'];
+
+/** how near a post its captors (and its defenders) must stand, tiles */
+export const CAPTURE_R = 2.2;
 
 export const BURN_IMMUNITY = 20;
 

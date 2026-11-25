@@ -32,6 +32,9 @@ function battle(
   });
   const G = game.world;
   for (const p of G.players) if (p.id > 1) p.alive = false;
+  // the starting soldiers stay single now (KAN-39) and would wander into the fight: clear them
+  for (const u of G.units) G.byId.delete(u.id);
+  G.units.length = 0;
   const [bx, by] = openBox(16, 14);
   const squad = (owner: number, x: number, y: number) => {
     const u = addUnit('inf', owner, x, y);

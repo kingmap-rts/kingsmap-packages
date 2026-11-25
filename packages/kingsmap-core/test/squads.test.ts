@@ -23,11 +23,17 @@ const mine = (game: Game, type: UnitType) =>
 const run = (game: Game, ticks: number) => {
   for (let i = 0; i < ticks; i++) game.step();
 };
+/** a human player's soldiers squad only by hand: press «Squad» on all of a type */
+const group = (game: Game, type: UnitType) =>
+  expect(
+    game.apply(0, { t: 'squad', ids: mine(game, type).map(u => u.id) }),
+  ).toBeNull();
 
 describe('squads (one unit, several soldiers)', () => {
-  it('idle soldiers of one type merge into one unit of at most 5', () => {
+  it('grouped soldiers of one type merge into units of at most 5', () => {
     const game = start();
     hire(game, 'inf', 7);
+    group(game, 'inf');
     run(game, 120);
     const inf = mine(game, 'inf');
     expect(rules.soldierCount(inf)).toBe(10); // 3 starting + 7 hired, nobody lost
@@ -38,6 +44,7 @@ describe('squads (one unit, several soldiers)', () => {
   it('a squad has the summed health of its soldiers', () => {
     const game = start();
     hire(game, 'inf', 5);
+    group(game, 'inf');
     run(game, 120);
     const sq = mine(game, 'inf').find(u => u.n === 5)!;
     expect(sq).toBeTruthy();
@@ -47,6 +54,7 @@ describe('squads (one unit, several soldiers)', () => {
   it('soldiers fall one by one as the squad loses health', () => {
     const game = start();
     hire(game, 'inf', 5);
+    group(game, 'inf');
     run(game, 120);
     const sq = mine(game, 'inf').find(u => u.n === 5)!;
     const lost0 = game.world.players[0].stats.unitsLost;
@@ -59,6 +67,7 @@ describe('squads (one unit, several soldiers)', () => {
   it('heavy units squad by 3; disband splits back and they stay single until grouped by hand', () => {
     const game = start();
     hire(game, 'siege', 3);
+    group(game, 'siege');
     run(game, 120);
     const sq = mine(game, 'siege').find(u => u.n === 3)!;
     expect(sq).toBeTruthy();
@@ -77,6 +86,7 @@ describe('squads (one unit, several soldiers)', () => {
   it('an order moves the squad as one unit', () => {
     const game = start();
     hire(game, 'inf', 5);
+    group(game, 'inf');
     run(game, 120);
     const sq = mine(game, 'inf').find(u => u.n === 5)!;
     const hq = game.world.players[0].hq;
