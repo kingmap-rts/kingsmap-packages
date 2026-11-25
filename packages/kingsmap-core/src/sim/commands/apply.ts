@@ -29,7 +29,7 @@ import { capturable } from '../systems/combat';
 import { canCapture } from '../systems/capture';
 import { cast, choosePath, pickPerk } from '../systems/paths';
 import { formSquads, unsquad } from '../systems/squads';
-import { canHire } from '../world/entities';
+import { canMuster } from '../world/entities';
 import { msg, notifyAll } from '../world/events';
 
 /** Apply one intent of a seat. Returns a message for the player when it was refused, else null. */
@@ -75,7 +75,8 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       if (!hostile(seat, e.owner)) return msg('error.ally');
       if (!capturable(e, seat)) return msg('error.notCapturable');
       const us = orderable(c.ids);
-      if (us.length && !canCapture(e, us)) return msg('error.captureFoot');
+      if (us.length && !canCapture(e, us))
+        return msg(e.linked ? 'error.captureFoot' : 'error.captureRaid');
       orderCapture(us, e);
       return null;
     }
@@ -109,7 +110,7 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       );
     case 'spawn': {
       const b = G.byId.get(c.b);
-      if (b && !b.dead && b.owner === seat && b.kind === 'b' && canHire(b))
+      if (b && !b.dead && b.owner === seat && b.kind === 'b' && canMuster(b))
         p.spawn = b.id;
       return null;
     }

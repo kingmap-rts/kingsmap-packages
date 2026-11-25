@@ -1,8 +1,9 @@
 /**
- * Capturing posts. A post cut off from its castle falls to any enemy troops that stand next to it
- * alone for CAPTURE_TIME. A post still linked (a store, a forge, barracks) falls only to foot soldiers
+ * Capturing posts. A post cut off from its castle falls to enemy troops (any but raiders) that stand
+ * next to it alone for CAPTURE_TIME. A post still linked (a store, a forge, barracks) falls only to foot soldiers
  * ordered to capture it (the `capture` intent), after CAPTURE_HOLD_TIME. A fort is taken only when
- * cut off; the castle never. Capturing never damages the post.
+ * cut off; the castle never. Raiders never take a post nor help to (KAN-31): they plunder it.
+ * Capturing never damages the post.
  */
 import type { Building, UnitType } from '../world/types';
 import { COLORS } from '../config/map';
@@ -11,6 +12,7 @@ import {
   CAPTURE_R,
   CAPTURE_TIME,
   CAPTURERS,
+  NON_CAPTURERS,
 } from '../config/network';
 import { G } from '../state';
 import { hostile } from './diplomacy';
@@ -21,13 +23,20 @@ import { logEvent, msg, notify } from '../world/events';
 /** a unit that can take a linked post: a foot soldier */
 export const capturer = (u: { type: UnitType }) => CAPTURERS.includes(u.type);
 
+/** can this unit take post b (or help to): a linked post needs a foot soldier, a cut-off one anyone but a raider */
+export const takesPost = (b: Building, u: { type: UnitType }) =>
+  b.linked ? capturer(u) : !NON_CAPTURERS.includes(u.type);
+
 /** a post that can be taken at all (who may take it: canCapture): never the castle, a fort only when cut off */
 export const takeable = (b: Building) =>
   b.type === 'depot' && (!b.linked || b.spec !== 'fort');
 
-/** can these units be ordered to take post b (whoever owns it): a linked one needs a foot soldier */
+/**
+ * can these units be ordered to take post b (whoever owns it): a linked one needs a foot soldier, a
+ * cut-off one anyone but raiders (raiders alone are refused, among other troops they just go along)
+ */
 export const canCapture = (b: Building, units: readonly { type: UnitType }[]) =>
-  takeable(b) && (!b.linked || units.some(capturer));
+  takeable(b) && units.some(u => takesPost(b, u));
 
 /** seconds post b holds out against its captors */
 export const captureTime = (b: Building) =>
@@ -88,7 +97,8 @@ export function captureTick(dt: number) {
         break;
       }
       if (!hostile(b.owner, u.owner)) continue;
-      if (held && (u.capB !== b.id || !capturer(u))) continue;
+      // raiders never count; a linked post only foot soldiers under the order to take it
+      if (!takesPost(b, u) || (held && u.capB !== b.id)) continue;
       if (foe === -1) foe = u.owner;
       else if (foe !== u.owner) mixed = true;
     }

@@ -11,6 +11,7 @@ import {
   ROAD_LEN,
 } from '../src/sim/config/network';
 import { kill } from '../src/sim/systems/combat';
+import { canCapture } from '../src/sim/systems/capture';
 
 /** an open box whose post spot (x + 10, y + 5) is beyond road reach of seat 1's buildings */
 function openBox(w: number, h: number, far: Building[]): [number, number] {
@@ -27,7 +28,11 @@ function openBox(w: number, h: number, far: Building[]): [number, number] {
 }
 
 /** three squads of seat 0 a few tiles from a cut-off post of seat 1 (no roads, no defenders) */
-function stage(): { game: Game; post: Building; mine: Unit[] } {
+function stage(type: Unit['type'] = 'inf'): {
+  game: Game;
+  post: Building;
+  mine: Unit[];
+} {
   const game = createGame({
     seed: 3,
     headless: true,
@@ -43,7 +48,7 @@ function stage(): { game: Game; post: Building; mine: Unit[] } {
   const post = addBuilding('depot', 1, bx + 10, by + 5);
   const mine: Unit[] = [];
   for (let i = 0; i < 3; i++) {
-    const u = addUnit('inf', 0, bx + 2, by + 4 + i);
+    const u = addUnit(type, 0, bx + 2, by + 4 + i);
     u.n = 5;
     u.maxhp = u.hp = 5 * u.mhp;
     u.solo = true;
@@ -274,6 +279,78 @@ describe('buildings are attacked only by order; linked posts are captured (KAN-4
     const { game, post, mine } = linkedStage(undefined, ['siege']);
     run(game, mine, 30, () => post.hp < post.maxhp);
     expect(post.hp).toBeLessThan(post.maxhp);
+  });
+});
+
+describe('raiders plunder posts, they never take them (KAN-31)', () => {
+  /** seat 0's troops walked next to the post, then left standing there for `seconds` */
+  function standBy(game: Game, post: Building, mine: Unit[], seconds: number) {
+    const ids = mine.map(u => u.id);
+    game.apply(0, { t: 'move', ids, x: post.x, y: post.y, mode: 'move' });
+    run(game, mine, seconds, () => post.owner === 0);
+  }
+
+  it('raiders alone by a cut-off fort never take it', () => {
+    const { game, post, mine } = stage('raid');
+    post.spec = 'fort';
+    standBy(game, post, mine, 30);
+    expect(
+      mine.every(u => Math.hypot(u.x - post.x - 0.5, u.y - post.y - 0.5) < 2.2),
+    ).toBe(true);
+    expect(post.linked).toBe(false);
+    expect(post.owner).toBe(1);
+    expect(post.cap).toBe(0);
+  });
+
+  it('raiders alone by a cut-off post never take it either: they plunder its stock', () => {
+    const { game, post, mine } = stage('raid');
+    post.stock.wood = 40;
+    standBy(game, post, mine, 30);
+    expect(post.owner).toBe(1);
+    expect(post.cap).toBe(0);
+    expect(post.stock.wood).toBeLessThan(40);
+  });
+
+  it('raiders cannot be ordered to capture a cut-off post; with a soldier among them it is taken', () => {
+    const { game, post, mine } = stage('raid');
+    const ids = mine.map(u => u.id);
+    expect(game.apply(0, { t: 'capture', ids, target: post.id })?.key).toBe(
+      'error.captureRaid',
+    );
+    expect(mine.every(u => !u.capB)).toBe(true);
+    const inf = addUnit('inf', 0, mine[0].x, mine[0].y - 1);
+    inf.solo = true;
+    const all = [...mine, inf];
+    expect(
+      game.apply(0, { t: 'capture', ids: all.map(u => u.id), target: post.id }),
+    ).toBeNull();
+    run(game, all, 30, () => post.owner === 0);
+    expect(post.owner).toBe(0);
+  });
+
+  it('a soldier by a cut-off fort takes it in CAPTURE_TIME, raiders standing with him neither help nor hinder', () => {
+    const { game, post, mine } = stage('raid');
+    post.spec = 'fort';
+    const inf = addUnit('inf', 0, mine[0].x, mine[0].y - 1);
+    inf.solo = true;
+    const all = [...mine, inf];
+    standBy(game, post, all, 30);
+    expect(post.owner).toBe(0);
+  });
+
+  it('who may take a post (rules.canCapture)', () => {
+    const { post } = stage();
+    const raid = { type: 'raid' as const };
+    const inf = { type: 'inf' as const };
+    const siege = { type: 'siege' as const };
+    expect(canCapture(post, [raid])).toBe(false);
+    expect(canCapture(post, [raid, siege])).toBe(true);
+    expect(canCapture(post, [raid, inf])).toBe(true);
+    post.spec = 'fort';
+    expect(canCapture(post, [raid])).toBe(false);
+    expect(canCapture(post, [inf])).toBe(true);
+    post.linked = true;
+    expect(canCapture(post, [inf])).toBe(false);
   });
 });
 

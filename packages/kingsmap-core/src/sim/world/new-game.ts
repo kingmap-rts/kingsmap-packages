@@ -110,7 +110,7 @@ export function newGame(diff: Difficulty, opts: NewGameOptions) {
       auto: false,
       spawn: null,
       alive: true,
-      res: { wood: 90, ore: 0, steel: 45, food: 40, crystal: 0 },
+      res: { wood: 90, ore: 0, steel: 25, food: 40, crystal: 0 },
       doc: null,
       perks: [],
       ultCd: 0,

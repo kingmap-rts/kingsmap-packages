@@ -113,6 +113,8 @@ export { noiseHash, fbm } from './sim/util/noise';
 export {
   isDepot,
   canHire,
+  canHireHere,
+  canMuster,
   buildingIcon,
   centerX,
   centerY,
@@ -129,6 +131,7 @@ export {
 export { squadSize, soldierCount } from './sim/systems/squads';
 export {
   capturer,
+  takesPost,
   takeable,
   canCapture,
   captureTime,

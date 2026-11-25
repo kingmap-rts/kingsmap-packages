@@ -1,6 +1,6 @@
 /** One simulation tick: every system in a fixed order. */
 import { Color } from '@kingmap-rts/kingsmap-types';
-import type { Building, Unit } from './world/types';
+import type { Building, Unit, UnitType } from './world/types';
 import { botTick } from './ai/bot';
 import { canAfford, train } from './commands/build';
 import {
@@ -8,6 +8,7 @@ import {
   FOOD_PER_PERSON,
   FORGE_RATE,
   HQ_FORGE,
+  MILITIA_STEEL_MARGIN,
   RESOURCES,
   STOCK_CAP,
   STORE_BASE,
@@ -78,7 +79,6 @@ export function update(dt: number) {
     if (!p.alive) continue;
     if (p.hq && !p.hq.dead) {
       p.res.wood += 0.25 * dt;
-      p.res.steel += 0.1 * dt;
       p.res.food += 0.2 * dt;
       const c = Math.min(p.res.ore, HQ_FORGE * forgeBonus(p) * dt);
       p.res.ore -= c;
@@ -285,10 +285,16 @@ export function update(dt: number) {
     p.autoT = (p.autoT || 0) - dt;
     if (p.autoT > 0) continue;
     p.autoT = 1;
-    const type = rand() < 0.3 ? 'raid' : 'inf';
+    // short of steel: a militiaman, who needs none; else a man-at-arms or a raider
+    const type: UnitType =
+      p.res.steel < UNITS.inf.steel + MILITIA_STEEL_MARGIN
+        ? 'militia'
+        : rand() < 0.3
+          ? 'raid'
+          : 'inf';
     if (
       p.res.food >= UNITS[type].food + 12 &&
-      p.res.steel >= UNITS[type].steel + 8 &&
+      (type === 'militia' || p.res.steel >= UNITS[type].steel + 8) &&
       p.pop - 1 >= p.labor * 0.8 &&
       canAfford(p, UNITS[type])
     ) {

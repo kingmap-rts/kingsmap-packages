@@ -25,8 +25,15 @@ export const CAPTURE_TIME = 4;
  */
 export const CAPTURE_HOLD_TIME = 12;
 
-/** the units that can take a linked post (foot soldiers); a cut-off post falls to anyone */
+/** the units that can take a linked post (foot soldiers); a cut-off post falls to anyone but raiders */
 export const CAPTURERS: readonly UnitType[] = ['inf', 'militia'];
+
+/**
+ * the units that never take a post, linked or cut off, nor help to (KAN-31): raiders plunder a post's
+ * stock and burn roads, they do not hold land. Standing by a post they neither count for its captors
+ * nor hold back troops of their own side that take it.
+ */
+export const NON_CAPTURERS: readonly UnitType[] = ['raid'];
 
 /** how near a post its captors (and its defenders) must stand, tiles */
 export const CAPTURE_R = 2.2;

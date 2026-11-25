@@ -179,7 +179,6 @@ export function readLedger(w: World, seat: number): ResourceLedger {
 /** the castle's trickle (wood, steel, food per second) and the ore its forge melted this tick */
 export function castleBooks(seat: number, dt: number, forged: number): void {
   gain(seat, 'wood', 'castle', 0.25 * dt);
-  gain(seat, 'steel', 'castle', 0.1 * dt);
   gain(seat, 'food', 'castle', 0.2 * dt);
   spend(seat, 'ore', 'forge', forged);
   gain(seat, 'steel', 'forge', forged);

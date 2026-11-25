@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { BUILDINGS, POST_SPECS } from '../config/buildings';
 import { UNITS } from '../config/units';
-import { hasPerk } from '../modifiers';
+import { hasPerk, LEVIES_HP } from '../modifiers';
 import { G } from '../state';
 import { dist, tileIndex } from '../util/geometry';
 import { dominantResource, goodsTotal } from '../util/resources';
@@ -99,6 +99,10 @@ export function addUnit(type: UnitType, owner: number, x: number, y: number) {
     u.hp *= 1.25;
     u.maxhp *= 1.25;
   }
+  if (type === 'militia' && hasPerk(G.players[owner], 'levies')) {
+    u.hp *= LEVIES_HP;
+    u.maxhp *= LEVIES_HP;
+  }
   if (type !== 'wagon' && hasPerk(G.players[owner], 'drill')) {
     u.hp *= 1.1;
     u.maxhp *= 1.1;
@@ -133,6 +137,17 @@ export const isDepot = (b: Building) => b.type === 'hq' || b.type === 'depot';
 
 export const canHire = (b: Building) =>
   b.type === 'hq' || b.spec === 'barracks';
+
+/**
+ * may this building hire this unit: the castle and a barracks hire anyone; a realm with `levies`
+ * hires its militia at any post of its own
+ */
+export const canHireHere = (b: Building, type: UnitType) =>
+  canHire(b) || (type === 'militia' && hasPerk(G.players[b.owner], 'levies'));
+
+/** may the realm set this building as its rally point for new units */
+export const canMuster = (b: Building) =>
+  canHire(b) || hasPerk(G.players[b.owner], 'levies');
 
 export const buildingIcon = (b: Building) =>
   b.spec ? POST_SPECS[b.spec].icon : BUILDINGS[b.type].icon;

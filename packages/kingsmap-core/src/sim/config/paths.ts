@@ -22,12 +22,12 @@ export const PATH_COST: number[] = [0, 1, 2, 3].map(nodeCost);
 
 export const ULT_COOLDOWN = 180;
 
-/** each path's own unit */
+/** each path's own unit; `land` has none: its third node strengthens the militia every realm hires */
 export const PATHS: Record<PathId, PathSpec> = {
   guild: { unit: 'builder' },
   shadow: { unit: 'arsonist' },
   forge: { unit: 'golem' },
-  land: { unit: 'militia' },
+  land: {},
 };
 
 /** the branches in the order the tree is drawn */
@@ -52,7 +52,9 @@ function branch(
     [root]: { branch: b, tier: 1 },
     [t2[0]]: { branch: b, tier: 2, req: [root] },
     [t2[1]]: { branch: b, tier: 2, req: [root] },
-    [unit]: { branch: b, tier: 3, req: t2, unit: PATHS[b].unit },
+    [unit]: PATHS[b].unit
+      ? { branch: b, tier: 3, req: t2, unit: PATHS[b].unit }
+      : { branch: b, tier: 3, req: t2 },
     [t4[0]]: { branch: b, tier: 4, req: [unit] },
     [t4[1]]: { branch: b, tier: 4, req: [unit] },
     [t5[0]]: { branch: b, tier: 5, req: t4, ult: 1 },

@@ -60,8 +60,8 @@ export interface SiteSpec {
 }
 
 export interface PathSpec {
-  /** unique unit of the path (unlocked by one node of its branch) */
-  unit: UnitType;
+  /** unique unit of the path (unlocked by one node of its branch); none: that node is a boon */
+  unit?: UnitType;
 }
 
 /** a node of the skill tree */

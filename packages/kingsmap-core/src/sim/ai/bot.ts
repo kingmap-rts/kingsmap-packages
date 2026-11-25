@@ -25,7 +25,8 @@ import { Deposit, Terrain } from '../config/map';
 import { POST_RADIUS, ROAD_LEN } from '../config/network';
 import { PATHS } from '../config/paths';
 import { UNITS } from '../config/units';
-import { unitCost, unitUnlocked } from '../modifiers';
+import { hasPerk, unitCost, unitUnlocked } from '../modifiers';
+import { MILITIA_STEEL_MARGIN } from '../config/economy';
 import { G, depositMap, sites, terrainMap } from '../state';
 import { hostile } from '../systems/diplomacy';
 import { orderAttack, orderMove } from '../systems/movement';
@@ -192,6 +193,10 @@ export function botTick(p: Player) {
   const hireAt = [p.hq, ...deps.filter(b => b.spec === 'barracks')].reduce(
     (a, c) => (toFoe(c) < toFoe(a) ? c : a),
   );
+  // with `levies` any post hires militia: the one nearest the foe
+  const militiaAt = hasPerk(p, 'levies')
+    ? [p.hq, ...deps].reduce((a, c) => (toFoe(c) < toFoe(a) ? c : a))
+    : hireAt;
   for (let n = 0; n < 2 && soldierCount(army) < cap; n++) {
     const nW = soldierCount(army.filter(u => u.type === 'wagon'));
     const nS = soldierCount(army.filter(u => u.type === 'siege'));
@@ -215,14 +220,9 @@ export function botTick(p: Player) {
       type = 'siege';
     // a doctrine unit now and then, only when it is affordable (otherwise hire the usual soldier) and useful:
     // builders only while one of our roads burns, arsonists only once there is an enemy network to burn
-    if (
-      p.doc &&
-      unitUnlocked(p, PATHS[p.doc].unit) &&
-      type !== 'wagon' &&
-      rand() < 0.22
-    ) {
-      const uu = PATHS[p.doc].unit;
-      const lim = uu === 'militia' ? 14 : uu === 'golem' ? 4 : 3;
+    const uu = p.doc ? PATHS[p.doc].unit : undefined;
+    if (uu && unitUnlocked(p, uu) && type !== 'wagon' && rand() < 0.22) {
+      const lim = uu === 'golem' ? 4 : 3;
       const useful =
         uu === 'builder'
           ? G.links.some(l => l.owner === p.id && (G.sab.get(l.key) || 0) > G.t)
@@ -237,15 +237,22 @@ export function botTick(p: Player) {
       )
         type = uu;
     }
+    // short of steel for a soldier: a militiaman, who needs none
+    if (
+      (type === 'inf' || type === 'raid') &&
+      p.res.steel < UNITS.inf.steel + MILITIA_STEEL_MARGIN
+    )
+      type = 'militia';
     if (
       p.res.food < 14 ||
-      p.res.steel < UNITS[type].steel + (wantSpec && !acted ? 28 : 6) ||
+      (UNITS[type].steel > 0 &&
+        p.res.steel < UNITS[type].steel + (wantSpec && !acted ? 28 : 6)) ||
       !canAfford(p, unitCost(p, type))
     )
       break;
     if (p.pop < 1 || p.pop - 1 < p.labor * (p.ai.alert > G.t ? 0.3 : P.labor))
       break;
-    const u = train(p, type, hireAt);
+    const u = train(p, type, type === 'militia' ? militiaAt : hireAt);
     if (!('key' in u)) army.push(u);
   }
   // 4. military

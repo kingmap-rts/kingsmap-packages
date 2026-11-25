@@ -30,7 +30,7 @@ import { hostile } from '../systems/diplomacy';
 import { SPIRAL } from '../systems/movement';
 import { dist, tileIndex, inBounds } from '../util/geometry';
 import { rand } from '../util/rng';
-import { addBuilding, addUnit, canHire, isDepot } from '../world/entities';
+import { addBuilding, addUnit, canHireHere, isDepot } from '../world/entities';
 import { logEvent, msg } from '../world/events';
 import { dry } from '../world/terrain';
 import { spend } from '../ledger';
@@ -199,7 +199,9 @@ export function train(
   if (!canAfford(p, cost)) return msg('error.noResources');
   if (p.pop < (S.pop || 1)) return msg('error.noPeople');
   const d =
-    at && !at.dead && at.linked && at.owner === p.id && canHire(at) ? at : p.hq;
+    at && !at.dead && at.linked && at.owner === p.id && canHireHere(at, type)
+      ? at
+      : p.hq;
   if (!d || d.dead) return msg('error.noCastle');
   for (const [dx, dy] of HIRE_SPOTS) {
     const x = d.x + dx;
