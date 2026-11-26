@@ -34,6 +34,33 @@ import { dry } from './terrain';
 export const centreDist = (x: number, y: number) =>
   vecLen((x - MAP_W / 2) / (MAP_W / 2), (y - MAP_H / 2) / (MAP_H / 2));
 
+/**
+ * The tiles (dx, dy) from a grain tile where a mountain's drawn peak would cover its wheat: a peak
+ * stands over the tile above it and spills onto the tiles beside it (and a tall one, two rows
+ * down, reaches up into this row). Grain keeps clear of every mountain there.
+ */
+export const PEAK_REACH: readonly Tile[] = [-1, 0, 1].flatMap(dx =>
+  [-1, 0, 1, 2].map((dy): Tile => [dx, dy]),
+);
+
+/** no mountain within a peak's drawn reach of (x, y) */
+const clearOfPeaks = (x: number, y: number) =>
+  PEAK_REACH.every(
+    ([dx, dy]) =>
+      !inBounds(x + dx, y + dy) ||
+      terrainMap[tileIndex(x + dx, y + dy)] !== Terrain.Mountain,
+  );
+
+/** level every mountain within a peak's drawn reach of (x, y) to plain */
+const levelPeaks = (x: number, y: number) => {
+  for (const [dx, dy] of PEAK_REACH)
+    if (
+      inBounds(x + dx, y + dy) &&
+      terrainMap[tileIndex(x + dx, y + dy)] === Terrain.Mountain
+    )
+      terrainMap[tileIndex(x + dx, y + dy)] = Terrain.Plain;
+};
+
 export function genMap() {
   const s = matchState.seed % 10000;
   for (let y = 0; y < MAP_H; y++)
@@ -82,14 +109,29 @@ export function genMap() {
     const b = starts[(i + 1) % SEATS];
     carve(a[0], a[1], b[0], b[1]);
   }
-  const patch = (x: number, y: number, kind: string, n: number) => {
+  // a grain patch never lies under a peak's picture: a castle's own field levels the mountains
+  // there (as the start's clearing does), the other fields skip those tiles (and water and mountain)
+  const patch = (
+    x: number,
+    y: number,
+    kind: string,
+    n: number,
+    level = false,
+  ) => {
     for (let i = 0; i < n; i++) {
       if (inBounds(x, y)) {
         const k = tileIndex(x, y);
         if (kind === 'forest') {
           terrainMap[k] = Terrain.Forest;
           depositMap[k] = 0;
-        } else {
+        } else if (
+          kind !== 'grain' ||
+          level ||
+          (terrainMap[k] !== Terrain.Water &&
+            terrainMap[k] !== Terrain.Mountain &&
+            clearOfPeaks(x, y))
+        ) {
+          if (level) levelPeaks(x, y);
           terrainMap[k] = Terrain.Plain;
           depositMap[k] =
             kind === 'ore'
@@ -114,7 +156,7 @@ export function genMap() {
     const dx = Math.sign(cx - sx);
     const dy = Math.sign(cy - sy);
     patch(sx + dx * 4, sy - dy, 'ore', 5);
-    patch(sx - dx, sy + dy * 4, 'grain', 6);
+    patch(sx - dx, sy + dy * 4, 'grain', 6, true);
     patch(sx - dx * 3, sy - dy * 3, 'forest', 4);
     patch(sx + dx * 3, sy + dy * 3, 'forest', 5);
     terrainMap[tileIndex(sx, sy)] = Terrain.Plain;
