@@ -23,7 +23,7 @@ import { hostile, supplyDeps } from './diplomacy';
 import { roadRoute, roadTiles } from './roads';
 import { routeLength } from './roadTravel';
 import { builderTick, sabotageTick } from './sabotage';
-import { dist, tileIndex, segmentDist } from '../util/geometry';
+import { dist, segmentDist, sq, tileIndex } from '../util/geometry';
 import { isDepot, linkKey } from '../world/entities';
 import { logEvent, msg, notify } from '../world/events';
 
@@ -85,7 +85,7 @@ export function claimLand(own: Int8Array, tdep: Int32Array) {
         x <= Math.min(MAP_W - 1, b.x + R);
         x++
       ) {
-        const r2 = (x - b.x) ** 2 + (y - b.y) ** 2;
+        const r2 = sq(x - b.x) + sq(y - b.y);
         if (r2 > R * R + 0.5) continue;
         const k = tileIndex(x, y);
         const d2 = b.type === 'hq' ? r2 * 0.55 : r2;
@@ -225,7 +225,7 @@ export interface RoadPost {
  * on, its route around the mountains no longer than ROAD_DETOUR times the straight line.
  */
 function roadPossible(a: RoadPost, b: RoadPost, R: number): boolean {
-  const d2 = (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+  const d2 = sq(a.x - b.x) + sq(a.y - b.y);
   if (d2 > R * R) return false;
   if (ROAD_DETOUR === Infinity) return true;
   const route = roadRoute(
@@ -246,8 +246,8 @@ function inLune(a: RoadPost, b: RoadPost, c: RoadPost): boolean {
   const h = ROAD_BETA / 2;
   const r2 = h * h * (ex * ex + ey * ey);
   // the two centres: a + h·(b − a) and b − h·(b − a)
-  const d1 = (c.x - a.x - h * ex) ** 2 + (c.y - a.y - h * ey) ** 2;
-  const d2 = (c.x - b.x + h * ex) ** 2 + (c.y - b.y + h * ey) ** 2;
+  const d1 = sq(c.x - a.x - h * ex) + sq(c.y - a.y - h * ey);
+  const d2 = sq(c.x - b.x + h * ex) + sq(c.y - b.y + h * ey);
   // on the edge counts as inside: four posts on one circle would otherwise keep both (crossing)
   // diagonals. Not at β = 2, where it would take all three sides of an equilateral triangle; below
   // 2 a post on the edge is still nearer both ends than they are to each other, so no post is lost

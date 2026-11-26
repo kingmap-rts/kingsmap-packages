@@ -7,8 +7,12 @@ Anything that changes what `step()` computes is a breaking change for online pla
 
 - All randomness through `rand()` / `randomInt()` (`sim/util/rng.ts`, seeded per match).
   Never `Math.random`, `Date`, `performance`, or iteration over unordered data.
-- Trigonometry that affects the state uses `detSin` / `detCos`; distances use `dist`
-  (`Math.sqrt` is exact everywhere).
+- Trigonometry uses `detSin` / `detCos` / `detAtan2`; distances use `dist` / `vecLen`
+  (`Math.sqrt` is exact everywhere), squares `sq(x)` (all in `sim/util/geometry.ts`). The spec
+  leaves `Math.sin/cos/tan/atan2/hypot/exp/log/pow/…` and `**` engine-dependent, so ESLint
+  forbids them, `Math.random`, `Date` and `performance` anywhere in `src/` (`.eslintrc.js`
+  overrides). Exact everywhere and allowed: `+ - * /`, `sqrt`, `floor/ceil/round/trunc`,
+  `abs/sign/min/max`, `imul`, `fround`.
 - Do not reorder systems in `sim/update.ts` or calls inside a system, and do not change the
   order of `rand()` calls: that changes every match from that point on.
 - Visual-only data (`world.fx`, `world.shots`, `terrV`, `ang`) must never be read by the sim.

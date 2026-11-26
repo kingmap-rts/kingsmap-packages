@@ -6,7 +6,7 @@ import { G } from '../state';
 import { kill } from './combat';
 import { walkTo } from './movement';
 import { findPath } from './pathfinding';
-import { dist } from '../util/geometry';
+import { detCos, detSin, dist } from '../util/geometry';
 import { addUnit } from '../world/entities';
 import { msg } from '../world/events';
 import { walkable } from '../world/terrain';
@@ -203,8 +203,8 @@ export function unsquad(p: Player, ids: number[]): GameMessage | null {
       const m = addUnit(
         u.type,
         u.owner,
-        u.x + Math.cos(a) * 0.6,
-        u.y + Math.sin(a) * 0.6,
+        u.x + detCos(a) * 0.6,
+        u.y + detSin(a) * 0.6,
       );
       m.hp = Math.min(per, m.maxhp);
       m.ammo = u.ammo;

@@ -6,7 +6,13 @@ import { G } from '../state';
 import { laneExit, onLane, overWater, stepsAshore } from './bridges';
 import { bodiesNear, bodyR, partingBlows } from './combat';
 import { findPath } from './pathfinding';
-import { dist, segmentDist, tileIndex, vecLen } from '../util/geometry';
+import {
+  detAtan2,
+  dist,
+  segmentDist,
+  tileIndex,
+  vecLen,
+} from '../util/geometry';
 import { paceAt, walkable } from '../world/terrain';
 
 export function moveToward(
@@ -25,7 +31,7 @@ export function moveToward(
   const st = Math.min(sp, d);
   const nx = e.x + (dx / d) * st;
   const ny = e.y + (dy / d) * st;
-  e.ang = Math.atan2(dy, dx);
+  e.ang = detAtan2(dy, dx);
   turn(e, dx / d, dy / d);
   if (walkable(nx | 0, ny | 0)) {
     e.x = nx;
@@ -518,7 +524,7 @@ export function wade(u: Unit, speed: number, dt: number): boolean {
   if (d > 1e-4) {
     u.x += (dx / d) * st;
     u.y += (dy / d) * st;
-    u.ang = Math.atan2(dy, dx);
+    u.ang = detAtan2(dy, dx);
     turn(u, dx / d, dy / d);
   }
   u.mv = 1;

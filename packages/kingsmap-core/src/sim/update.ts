@@ -58,7 +58,7 @@ import { fireRainTick } from './systems/paths';
 import { arsonTick } from './systems/sabotage';
 import { joinTick, memberLoss, squadTick } from './systems/squads';
 import { dominationTick } from './systems/victory';
-import { dist, vecLen } from './util/geometry';
+import { detAtan2, dist, vecLen } from './util/geometry';
 import { goodsTotal } from './util/resources';
 import { rand } from './util/rng';
 import { centerX, centerY, isDepot } from './world/entities';
@@ -359,7 +359,7 @@ export function update(dt: number) {
         meleeStep(u, t, d, SPD, dt, ready);
       else if (d <= rr) {
         if (ready) fire(u, t);
-        u.ang = Math.atan2(ty - u.y, tx - u.x);
+        u.ang = detAtan2(ty - u.y, tx - u.x);
         if (d > 1e-3) turn(u, (tx - u.x) / d, (ty - u.y) / d);
       } else if (u.ftgt) {
         if (d > 3) {
@@ -546,7 +546,7 @@ function meleeStep(
   const nd = dist(u.x, u.y, t.x, t.y);
   if (nd <= S.range) {
     if (nd > 1e-3) turn(u, (t.x - u.x) / nd, (t.y - u.y) / nd);
-    u.ang = Math.atan2(t.y - u.y, t.x - u.x);
+    u.ang = detAtan2(t.y - u.y, t.x - u.x);
     if (ready) {
       fire(u, t);
     }

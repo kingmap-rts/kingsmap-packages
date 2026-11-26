@@ -12,6 +12,7 @@ import { findPath } from './pathfinding';
 import { bridgeLanes, bridgeTiles } from './roads';
 import { hostile } from './diplomacy';
 import { walkable } from '../world/terrain';
+import { sq } from '../util/geometry';
 
 /** does the bridge of this road stand? (while the road is there and not burning) */
 export const bridgeStands = (l: Link) => (G.sab.get(l.key) || 0) <= G.t;
@@ -168,7 +169,7 @@ function nearestLane(x: number, y: number) {
     t = Math.max(0, Math.min(1, t));
     const px = x0 + dx * t;
     const py = y0 + dy * t;
-    const d = Math.sqrt((x - px) * (x - px) + (y - py) * (y - py));
+    const d = Math.sqrt(sq(x - px) + sq(y - py));
     if (!best || d < best.d) best = { x: px, y: py, d, id };
   }
   return best;
@@ -229,8 +230,8 @@ export function laneExit(
   if (laneDist(L, n.id, tx, ty) <= ON) return null;
   const e = L.ends;
   const i = n.id * 4;
-  const d0 = (e[i] - tx) ** 2 + (e[i + 1] - ty) ** 2;
-  const d1 = (e[i + 2] - tx) ** 2 + (e[i + 3] - ty) ** 2;
+  const d0 = sq(e[i] - tx) + sq(e[i + 1] - ty);
+  const d1 = sq(e[i + 2] - tx) + sq(e[i + 3] - ty);
   const [ex, ey] = d0 <= d1 ? [e[i], e[i + 1]] : [e[i + 2], e[i + 3]];
   if (!walkable(ex | 0, ey | 0)) return null;
   const ox = ex - x;

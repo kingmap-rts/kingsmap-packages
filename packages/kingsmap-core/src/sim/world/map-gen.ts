@@ -17,14 +17,22 @@ import {
   sites,
   terrainMap,
 } from '../state';
-import { dist, tileIndex, detCos, detSin, inBounds } from '../util/geometry';
+import {
+  detAtan2,
+  detCos,
+  detSin,
+  dist,
+  inBounds,
+  tileIndex,
+  vecLen,
+} from '../util/geometry';
 import { fbm } from '../util/noise';
 import { randomInt, rand } from '../util/rng';
 import { dry } from './terrain';
 
 /** 0 in the middle of the map, 1 at the middle of an edge: an oval that follows the map's shape */
 export const centreDist = (x: number, y: number) =>
-  Math.hypot((x - MAP_W / 2) / (MAP_W / 2), (y - MAP_H / 2) / (MAP_H / 2));
+  vecLen((x - MAP_W / 2) / (MAP_W / 2), (y - MAP_H / 2) / (MAP_H / 2));
 
 export function genMap() {
   const s = matchState.seed % 10000;
@@ -136,12 +144,12 @@ export function genMap() {
   // so everyone can slowly grow a doctrine; the rich fields and every mana spring lie in the middle of the map,
   // so going faster means stretching your supply lines there
   for (const [sx, sy] of starts) {
-    const base = Math.atan2(cy - sy, cx - sx);
+    const base = detAtan2(cy - sy, cx - sx);
     for (let t = 0; t < 60; t++) {
       const a = base + (rand() - 0.5) * 1.2;
       const r = randomInt(9, 11);
-      const x = Math.round(sx + Math.cos(a) * r);
-      const y = Math.round(sy + Math.sin(a) * r);
+      const x = Math.round(sx + detCos(a) * r);
+      const y = Math.round(sy + detSin(a) * r);
       if (!inBounds(x, y) || !dry(x, y) || depositMap[tileIndex(x, y)])
         continue;
       patch(x, y, 'crystal', 3);
