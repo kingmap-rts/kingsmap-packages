@@ -1,6 +1,6 @@
 {
   "name": "@kingmap-rts/kingsmap-protocol",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Validators for what players send to the King's Map server (intents, match statistics) and the seat layout; types live in @kingmap-rts/kingsmap-types",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",

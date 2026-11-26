@@ -1,35 +1,36 @@
-name: Release
+name: CI & Release
 
-# Publishes every package whose version in package.json is not in GitHub Packages yet.
-# To release: bump the version in the package's package.json and merge to main
-# (or run this workflow by hand from the Actions tab).
+# One workflow for checks and publishing, so a push to main runs the checks once and publishes
+# only if they pass.
+# - pull_request: the checks only.
+# - push to main / manual run: the checks, then `publish` publishes every package whose version
+#   in package.json is not in GitHub Packages yet (no version bump = nothing new to publish).
+# To release: bump the version in the package's package.json and merge/push to main.
 on:
+  pull_request:
   push:
     branches: [main]
-    paths:
-      - 'packages/kingsmap-types/**'
-      - 'packages/kingsmap-protocol/**'
-      - 'packages/kingsmap-core/**'
-      - 'scripts/publish-new.mjs'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
-
-concurrency: release
+  packages: read
 
 jobs:
-  publish:
+  checks:
+    name: Build, Lint & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Corepack must be on before setup-node so its `cache: yarn` finds Yarn 4
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Enable Corepack
+          cache: yarn
+      - name: Enable Corepack for Node 22
         run: corepack enable
       - name: Install dependencies
         run: yarn install --immutable
@@ -37,8 +38,43 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build
         run: yarn build
+      - name: Type check
+        run: yarn typecheck
+      - name: Quality check
+        run: yarn check-quality
+      - name: Formatting check
+        run: yarn check-formatting
       - name: Test
         run: yarn test
+
+  publish:
+    name: Publish new versions
+    needs: checks
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+      - name: Enable Corepack for Node 22
+        run: corepack enable
+      - name: Install dependencies
+        run: yarn install --immutable
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build
+        run: yarn build
       - name: Publish new versions
         run: node scripts/publish-new.mjs
         env:

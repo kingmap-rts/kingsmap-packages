@@ -12,16 +12,40 @@ export interface LobbyPlayer {
   online: boolean;
 }
 
-/** Why the server refused a lobby action; the client shows the text in the player's language. */
+/**
+ * Why the server refused a lobby action; the client shows the text in the player's language.
+ * `update_required`: the client's core (`hello.core`) is not the server's major.minor, or it sent
+ * none; the server lets it in nowhere and the client should load the new build.
+ */
 export type ServerError =
-  'hello_first' | 'room_not_found' | 'room_started' | 'room_full';
+  | 'hello_first'
+  | 'room_not_found'
+  | 'room_started'
+  | 'room_full'
+  | 'update_required';
 
 /** what a started match is doing before its first turn (see the `prestart` message) */
 export type PrestartPhase = 'waiting' | 'countdown';
 
 /** client → server */
 export type ClientMsg =
-  | { t: 'hello'; nick: string; token?: string }
+  | {
+      t: 'hello';
+      nick: string;
+      token?: string;
+      /**
+       * the client's `@kingmap-rts/kingsmap-core` version (`CORE_VERSION`). Optional only so old
+       * clients still parse: the server answers a missing or different major.minor with
+       * `{ t: 'err', code: 'update_required' }`.
+       */
+      core?: string;
+      /**
+       * reconnecting to a running match the client already holds: its room code and how many
+       * turns from 0 it has without a gap. The catch-up `turns` then starts at `n` instead of 0
+       * (the server ignores it for another room and clamps `n` to the turns it has).
+       */
+      have?: { code: string; n: number };
+    }
   | { t: 'create' }
   /** quick match: join an open public game or open one that starts by itself */
   | { t: 'quick' }

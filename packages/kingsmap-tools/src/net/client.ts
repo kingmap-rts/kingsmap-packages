@@ -1,7 +1,11 @@
 // A headless online player: joins a quick match, simulates every turn like the browser does, sends random
 // orders that exercise every mechanic, reports hashes, and prints its final state hash as JSON.
 //   yarn workspace @kingmap-rts/kingsmap-tools net:client ws://localhost:8787/ws Name uk|en turns seed
-import { createGame, type Game } from '@kingmap-rts/kingsmap-core';
+import {
+  CORE_VERSION,
+  createGame,
+  type Game,
+} from '@kingmap-rts/kingsmap-core';
 import {
   Lockstep,
   type Intent,
@@ -180,7 +184,7 @@ function pump(g: Game) {
   }
 }
 
-ws.onopen = () => out({ t: 'hello', nick });
+ws.onopen = () => out({ t: 'hello', nick, core: CORE_VERSION });
 ws.onmessage = e => {
   const m: ServerMsg = JSON.parse(String(e.data));
   if (m.t === 'welcome') out({ t: 'quick' });

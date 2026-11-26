@@ -101,9 +101,11 @@ token to release:
 1. bump the version in the package's `package.json` (`yarn workspace @kingmap-rts/kingsmap-core version minor`);
 2. merge to `main`.
 
-The workflow builds, runs the tests and publishes every package whose version is not in the
-registry yet (`scripts/publish-new.mjs`, protocol before core). It can also be started by hand
-from the Actions tab. Local fallback with a PAT (`write:packages`) in `.env`:
+The same workflow runs the checks on every pull request and every push to `main` (build,
+typecheck, `check-quality`, `check-formatting`, test); on `main` its `publish` job starts only
+after they pass and publishes every package whose version is not in the registry yet
+(`scripts/publish-new.mjs`, protocol before core; no version bump = nothing to publish). It can
+also be started by hand from the Actions tab. Local fallback with a PAT (`write:packages`) in `.env`:
 `yarn publish:protocol` / `yarn publish:core`.
 
 > **Core versions and online play.** Any change to what the simulation computes changes the
