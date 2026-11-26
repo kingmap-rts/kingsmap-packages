@@ -8,6 +8,7 @@ export * from './game/map';
 export * from './net/lockstep';
 export * from './api/user';
 export * from './api/auth';
+export type * from './api/replays';
 export * from './style/color';
 export type * from './game/vocabulary';
 export type * from './game/message';
