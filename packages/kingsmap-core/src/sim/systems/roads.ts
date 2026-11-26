@@ -8,6 +8,11 @@
 import { MAP_H, MAP_W, Terrain } from '../config/map';
 import { vecLen } from '../util/geometry';
 
+// enum codes read once: `Terrain.X` / `Deposit.X` go through CommonJS re-export getters, which cost
+// about a third of tick time when read per tile (KAN-88)
+const MOUNTAIN = Terrain.Mountain;
+const WATER = Terrain.Water;
+
 /** a point in tiles */
 export type RoadPt = [number, number];
 
@@ -22,7 +27,7 @@ const mountain = (terrain: ArrayLike<number>, x: number, y: number) =>
   y < 0 ||
   x >= MAP_W ||
   y >= MAP_H ||
-  terrain[(y | 0) * MAP_W + (x | 0)] === Terrain.Mountain;
+  terrain[(y | 0) * MAP_W + (x | 0)] === MOUNTAIN;
 
 /** can a road run straight from p to q without touching a mountain? */
 function clear(terrain: ArrayLike<number>, p: RoadPt, q: RoadPt): boolean {
@@ -121,13 +126,12 @@ function search(
       const Y = y + dy;
       if (X < 0 || Y < 0 || X >= W || Y >= MAP_H) continue;
       const q = Y * W + X;
-      if (q !== ti && terrain[q] === Terrain.Mountain) continue;
+      if (q !== ti && terrain[q] === MOUNTAIN) continue;
       // never cut a mountain's corner
       if (
         dx &&
         dy &&
-        (terrain[y * W + X] === Terrain.Mountain ||
-          terrain[Y * W + x] === Terrain.Mountain)
+        (terrain[y * W + X] === MOUNTAIN || terrain[Y * W + x] === MOUNTAIN)
       )
         continue;
       const ng = g[k] + c;
@@ -252,7 +256,7 @@ const water = (terrain: ArrayLike<number>, x: number, y: number) =>
   y >= 0 &&
   x < MAP_W &&
   y < MAP_H &&
-  terrain[(y | 0) * MAP_W + (x | 0)] === Terrain.Water;
+  terrain[(y | 0) * MAP_W + (x | 0)] === WATER;
 
 /**
  * The stretches of the straight line p → q (in tiles) that a bridge spans: where it runs over

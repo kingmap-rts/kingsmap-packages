@@ -43,6 +43,11 @@ import {
   nearestLinkedDepot,
 } from '../world/entities';
 
+// enum codes read once: `Terrain.X` / `Deposit.X` go through CommonJS re-export getters, which cost
+// about a third of tick time when read per tile (KAN-88)
+const ORE = Deposit.Ore;
+const FOREST = Terrain.Forest;
+
 /** how long a bot's raider sent to burn a road waits there at most (a road that will not burn) */
 const CUT_WAIT = 45;
 
@@ -170,9 +175,9 @@ export function botTick(p: Player) {
           const k = tileIndex(X, Y);
           if (G.own[k] === -1) {
             sc += 0.08;
-            if (depositMap[k] === Deposit.Ore) sc += 1.5;
+            if (depositMap[k] === ORE) sc += 1.5;
             else if (depositMap[k]) sc += 1.1;
-            else if (terrainMap[k] === Terrain.Forest) sc += 0.25;
+            else if (terrainMap[k] === FOREST) sc += 0.25;
           }
         }
       // prefer making loops: bonus for each road to a linked depot the post would get (KAN-54)

@@ -9,6 +9,10 @@ import { roadDist, roadMap, roadSum, terrainMap } from '../state';
 import { tileIndex } from '../util/geometry';
 import { walkable } from '../world/terrain';
 
+// enum codes read once: `Terrain.X` / `Deposit.X` go through CommonJS re-export getters, which cost
+// about a third of tick time when read per tile (KAN-88)
+const FOREST = Terrain.Forest;
+
 export const gScore = new Float32Array(TILES);
 
 export const cameFrom = new Int32Array(TILES);
@@ -196,11 +200,7 @@ export function findPath(
       const ng =
         gScore[cur] +
         c *
-          (roadMap[ni] === 1
-            ? ROAD_COST
-            : terrainMap[ni] === Terrain.Forest
-              ? 1.3
-              : 1);
+          (roadMap[ni] === 1 ? ROAD_COST : terrainMap[ni] === FOREST ? 1.3 : 1);
       if (seenIn[ni] !== searchNo || ng < gScore[ni]) {
         seenIn[ni] = searchNo;
         gScore[ni] = ng;

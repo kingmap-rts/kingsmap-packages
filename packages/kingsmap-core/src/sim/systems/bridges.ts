@@ -15,6 +15,10 @@ import { walkable } from '../world/terrain';
 import { sq } from '../util/geometry';
 import { unitMoved } from '../world/unitGrid';
 
+// enum codes read once: `Terrain.X` / `Deposit.X` go through CommonJS re-export getters, which cost
+// about a third of tick time when read per tile (KAN-88)
+const WATER = Terrain.Water;
+
 /** does the bridge of this road stand? (while the road is there and not burning) */
 export const bridgeStands = (l: Link) => (G.sab.get(l.key) || 0) <= G.t;
 
@@ -179,7 +183,7 @@ function nearestLane(x: number, y: number) {
 /** (x, y) stands over the water of a bridge */
 export const overWater = (x: number, y: number) => {
   const k = (y | 0) * MAP_W + (x | 0);
-  return bridgeMap[k] === 1 && terrainMap[k] === Terrain.Water;
+  return bridgeMap[k] === 1 && terrainMap[k] === WATER;
 };
 
 /**

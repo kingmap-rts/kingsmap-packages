@@ -27,6 +27,14 @@ import { dist, segmentDist, sq, tileIndex } from '../util/geometry';
 import { isDepot, linkKey } from '../world/entities';
 import { logEvent, msg, notify } from '../world/events';
 
+// enum codes read once: `Terrain.X` / `Deposit.X` go through CommonJS re-export getters, which cost
+// about a third of tick time when read per tile (KAN-88)
+const FOREST = Terrain.Forest;
+const PLAIN = Terrain.Plain;
+const ORE = Deposit.Ore;
+const CRYSTAL = Deposit.Crystal;
+const GRAIN = Deposit.Grain;
+
 /** Is the road a–b cut for its owner? `by` is the seat with the most soldiers on it (-1 when it burns). */
 export function linkBlocked(
   a: Building,
@@ -115,12 +123,12 @@ export function computeTerritory() {
     if (own[k] < 0) continue;
     const b = G.byId.get(G.tdep[k]) as Building | undefined;
     if (!b || b.dead) continue;
-    if (depositMap[k] === Deposit.Ore) b.yld.ore += YIELD_ORE;
-    else if (depositMap[k] === Deposit.Crystal)
+    if (depositMap[k] === ORE) b.yld.ore += YIELD_ORE;
+    else if (depositMap[k] === CRYSTAL)
       b.yld.crystal += YIELD_CRYSTAL * TUNE.crystal;
-    else if (depositMap[k] === Deposit.Grain) b.yld.food += YIELD_GRAIN;
-    else if (terrainMap[k] === Terrain.Forest) b.yld.wood += YIELD_FOREST;
-    else if (terrainMap[k] === Terrain.Plain) {
+    else if (depositMap[k] === GRAIN) b.yld.food += YIELD_GRAIN;
+    else if (terrainMap[k] === FOREST) b.yld.wood += YIELD_FOREST;
+    else if (terrainMap[k] === PLAIN) {
       b.yld.wood += YIELD_PLAIN;
       b.yld.food += YIELD_PLAIN;
     }
@@ -452,17 +460,14 @@ export function recomputeNetwork() {
     if (o < 0) continue;
     tl[o]++;
     if (depositMap[k]) lb[o] += 0.6;
-    else if (terrainMap[k] === Terrain.Forest) lb[o] += 0.15;
+    else if (terrainMap[k] === FOREST) lb[o] += 0.15;
   }
   for (const st of sites)
     if (st.owner >= 0) lb[st.owner] += siteWorkers(G.players[st.owner]);
   const ld = new Array(SEATS).fill(0);
   for (let k = 0; k < TILES; k++) {
     const o = own[k];
-    if (
-      o >= 0 &&
-      (terrainMap[k] === Terrain.Plain || terrainMap[k] === Terrain.Forest)
-    )
+    if (o >= 0 && (terrainMap[k] === PLAIN || terrainMap[k] === FOREST))
       ld[o]++;
   }
   for (const p of G.players) {
