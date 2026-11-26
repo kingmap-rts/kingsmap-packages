@@ -33,6 +33,26 @@ export type UnitJob =
   | 'hunt'
   | null;
 
+/**
+ * A special order a unit carries out at an enemy road (KAN-60): a raider burns it, an arsonist hides
+ * a trap on it, any other unit cuts it by standing on it. While the task lasts the unit holds its
+ * spot on the road and turns on no foe but one within reach of where it stands.
+ */
+export type UnitTaskKind = 'burn' | 'cut' | 'trap';
+
+export interface UnitTask {
+  kind: UnitTaskKind;
+  /** the road's link key (Link.key) */
+  road: string;
+}
+
+/** a point a unit walks on to once its current march is done (KAN-61) */
+export interface Waypoint {
+  x: number;
+  y: number;
+  mode: 'move' | 'amove';
+}
+
 interface EntityBase {
   id: number;
   owner: number;
@@ -81,6 +101,13 @@ export interface Unit extends EntityBase {
   dest: Tile | null;
   repath: number;
   order?: 'move' | 'amove' | null;
+  /**
+   * points queued after the current march (Shift+click, KAN-61): each is this unit's own spot there
+   * (its place in the group kept) and how it goes; null or absent if none
+   */
+  wps?: Waypoint[] | null;
+  /** the special order this unit carries out at a road (burn, cut, trap), null or absent if none */
+  task?: UnitTask | null;
   job: UnitJob;
   jobUntil: number;
   /** facing angle, render only */

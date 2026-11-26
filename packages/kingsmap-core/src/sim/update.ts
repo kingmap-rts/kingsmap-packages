@@ -28,6 +28,7 @@ import { castleBooks, gain, spend, unfed } from './ledger';
 import { G } from './state';
 import {
   acquireTarget,
+  chaseReach,
   bodiesNear,
   bodyR,
   countTargets,
@@ -44,7 +45,13 @@ import { diploTick, hostile } from './systems/diplomacy';
 import { banditLoot, sendCaravan, wagonTick } from './systems/logistics';
 import { convoyRoute, routeLeft, stepAlong } from './systems/roadTravel';
 import { keepOnBridges, passOnBridge } from './systems/bridges';
-import { followPath, moveToward, turn, wade } from './systems/movement';
+import {
+  followPath,
+  moveToward,
+  nextLeg,
+  turn,
+  wade,
+} from './systems/movement';
 import { recomputeNetwork } from './systems/network';
 import { findPath } from './systems/pathfinding';
 import { fireRainTick } from './systems/paths';
@@ -332,7 +339,14 @@ export function update(dt: number) {
       u.slot = -1;
       u.chg = 0;
       u.chT = 0;
+      // the fight held it back: it catches its mates up at full speed (KAN-61)
+      u.gsp = 1;
       if (u.dest) u.path = findPath(u.x | 0, u.y | 0, u.dest[0], u.dest[1]);
+      // its foe fell: it looks for the next one at once instead of standing by the others till the
+      // next scan (KAN-61)
+      acquireTarget(u);
+      const n = u.tgt ? G.byId.get(u.tgt) : null;
+      t = n && !n.dead ? n : null;
     }
     if (t) {
       const tx = centerX(t);
@@ -340,7 +354,9 @@ export function update(dt: number) {
       const d = dist(u.x, u.y, tx, ty);
       const rr = S.range + (t.kind === 'b' ? 0.45 : 0);
       const ready = u.cd <= 0 && (!S.deploy || u.deployT >= deployTime(u));
-      if (t.kind === 'u' && melee(u)) meleeStep(u, t, d, SPD, dt, ready);
+      // (a unit on a road task, KAN-60, strikes from its spot and never steps after a foe)
+      if (t.kind === 'u' && melee(u) && !u.task)
+        meleeStep(u, t, d, SPD, dt, ready);
       else if (d <= rr) {
         if (ready) fire(u, t);
         u.ang = Math.atan2(ty - u.y, tx - u.x);
@@ -355,7 +371,7 @@ export function update(dt: number) {
           followPath(u, SPD, dt);
         } else moveToward(u, tx, ty, SPD, dt);
         chasing.add(u.id);
-      } else if (d < S.aggro * 1.7 && u.type !== 'siege') {
+      } else if (d < chaseReach(u, t) && u.type !== 'siege' && !u.task) {
         moveToward(u, tx, ty, SPD, dt);
         chasing.add(u.id);
       } else {
@@ -368,7 +384,15 @@ export function update(dt: number) {
         u.gsp = 1;
         if (u.order === 'move') u.order = 'amove';
       }
-    }
+    } else if (
+      !wet &&
+      u.task &&
+      u.end &&
+      dist(u.x, u.y, u.end[0], u.end[1]) > HOLD
+    )
+      // a unit on a road task, shoved off its spot, steps back onto it
+      moveToward(u, u.end[0], u.end[1], SPD, dt);
+    else if (!wet && u.wps) nextLeg(u);
     if (u.type === 'raid') banditLoot(u, dt);
     if (u.type === 'wagon') wagonTick(u, dt);
     if (S.deploy) {
@@ -449,6 +473,9 @@ export function update(dt: number) {
   }
 }
 
+/** a unit on a road task shoved farther than this from its spot steps back onto it, tiles */
+const HOLD = 0.6;
+
 /** a chase without an attack order lapses after this many seconds without a blow */
 const GIVE_UP = 2.5;
 
@@ -475,7 +502,7 @@ function meleeStep(
   ready: boolean,
 ) {
   const S = UNITS[u.type];
-  if (!u.ftgt && d >= S.aggro * 1.7) {
+  if (!u.ftgt && d >= chaseReach(u, t)) {
     dropTarget(u);
     return;
   }
@@ -541,6 +568,7 @@ function dropTarget(u: Unit) {
   u.slot = -1;
   u.chg = 0;
   u.chT = 0;
+  u.gsp = 1;
   if (u.dest) u.path = findPath(u.x | 0, u.y | 0, u.dest[0], u.dest[1]);
 }
 

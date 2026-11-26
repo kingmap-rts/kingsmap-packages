@@ -1,11 +1,12 @@
 /** Burning roads: bandits, arsonists and their traps, builders who put fires out. */
 import { Color } from '@kingmap-rts/kingsmap-types';
-import type { Convoy, Link, Unit } from '../world/types';
+import type { Convoy, Link, Unit, UnitTaskKind } from '../world/types';
 import { RESOURCES } from '../config/economy';
 import { BURN_IMMUNITY } from '../config/network';
 import { hasPerk, burnTime, arsonTime } from '../modifiers';
 import { G } from '../state';
 import { hostile } from './diplomacy';
+import { orderMove } from './movement';
 import { segmentDist } from '../util/geometry';
 import { logEvent, msg, notify } from '../world/events';
 
@@ -123,7 +124,8 @@ export function arsonTick(u: Unit, dt: number) {
   if (u.trapCd !== undefined && u.trapCd > G.t) return;
   let best = null;
   for (const l of G.links) {
-    if (!hostile(u.owner, l.owner) || l.blocked) continue;
+    // (a road that burns takes no trap; one cut only by the arsonist standing on it does, KAN-60)
+    if (!hostile(u.owner, l.owner) || (G.sab.get(l.key) || 0) > G.t) continue;
     const ax = l.a.x + 0.5;
     const ay = l.a.y + 0.5;
     const bx = l.b.x + 0.5;
@@ -150,6 +152,8 @@ export function arsonTick(u: Unit, dt: number) {
     u.trapT = 0;
     u.trapCd = G.t + 20;
     notify(u.owner, msg('notice.trapHidden'));
+    // the trap was what it was sent for
+    if (u.task?.kind === 'trap') u.task = null;
   }
 }
 
@@ -164,4 +168,40 @@ export function springTrap(c: Convoy) {
     G.sab.set(c.key, Math.max(G.sab.get(c.key) || 0, G.t + 20));
     notify(c.owner, msg('notice.trapSprung'));
   }
+}
+
+/** the task a unit of this type takes at an enemy road: raiders burn it, arsonists trap it, the rest cut it */
+export const taskKind = (u: Unit): UnitTaskKind =>
+  u.type === 'raid' ? 'burn' : u.type === 'arsonist' ? 'trap' : 'cut';
+
+/**
+ * Send units to (x, y) by enemy road l to work it to the end (KAN-60): they walk there like a plain
+ * move (not stopping for foes on the way), then hold the spot until the road burns (raiders), a trap
+ * is hidden on it (arsonists) or for as long as they stand (others cut it), striking only a foe within
+ * reach of where they stand (acquireTarget). Any new order, the road gone or no longer hostile ends it.
+ * Wagons only go there.
+ */
+export function orderSabotage(units: Unit[], l: Link, x: number, y: number) {
+  orderMove(units, x, y, 'move');
+  for (const u of units)
+    if (u.type !== 'wagon') u.task = { kind: taskKind(u), road: l.key };
+}
+
+/** is the road task of u still to do: the road stands, is hostile, and (to burn) can burn and has not */
+export function taskLive(u: Unit): boolean {
+  const k = u.task;
+  if (!k) return false;
+  let l: Link | null = null;
+  for (const q of G.links)
+    if (q.key === k.road) {
+      l = q;
+      break;
+    }
+  if (!l || !hostile(u.owner, l.owner)) return false;
+  if (k.kind === 'burn') {
+    // burning, or just burnt out and not yet able to burn again
+    const until = G.sab.get(l.key) || 0;
+    if (until > 0 && G.t < until + BURN_IMMUNITY) return false;
+  }
+  return true;
 }

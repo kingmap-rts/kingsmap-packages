@@ -11,10 +11,27 @@ import type {
 
 /** A player's command. Seats are 0..Limits.MaxPlayers-1; ids refer to entity ids in the world. */
 export type Intent =
-  | { t: 'move'; ids: number[]; x: number; y: number; mode?: 'move' | 'amove' }
+  /**
+   * walk to (x, y); 'amove' (the default) fights every foe met on the way. queue: added after the
+   * points the units already go to (Shift+click) instead of replacing their order (KAN-61)
+   */
+  | {
+      t: 'move';
+      ids: number[];
+      x: number;
+      y: number;
+      mode?: 'move' | 'amove';
+      queue?: boolean;
+    }
   | { t: 'attack'; ids: number[]; target: number }
   /** walk to a hostile post and take it: the troops stand by it and never shoot that post */
   | { t: 'capture'; ids: number[]; target: number }
+  /**
+   * walk to (x, y) by an enemy road (key: Link.key) and work it to the end (KAN-60): raiders burn
+   * it, arsonists hide a trap on it, other troops cut it by standing there; foes on the way or
+   * nearby do not draw them off
+   */
+  | { t: 'sabotage'; ids: number[]; road: string; x: number; y: number }
   | { t: 'stop'; ids: number[] }
   | { t: 'build'; x: number; y: number }
   | { t: 'train'; type: UnitType }

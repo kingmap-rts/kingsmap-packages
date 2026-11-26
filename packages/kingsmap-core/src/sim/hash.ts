@@ -6,8 +6,10 @@
 import { PATHS } from './config/paths';
 import { RESOURCES } from './config/economy';
 import { G, matchState } from './state';
+import type { UnitTaskKind } from './world/types';
 
 const PATH_IDS = Object.keys(PATHS);
+const TASK_CODE: Record<UnitTaskKind, number> = { burn: 1, cut: 2, trap: 3 };
 
 export function stateHash(): string {
   const f = new Float64Array(1);
@@ -54,6 +56,8 @@ export function stateHash(): string {
     num(u.hx);
     num(u.hy);
     num(u.slot);
+    // a road task (KAN-60) keeps a unit on its spot
+    num(u.task ? TASK_CODE[u.task.kind] : 0);
   }
   for (const bl of G.buildings) {
     num(bl.id);

@@ -15,6 +15,7 @@ const PLAYER_INTENTS = new Set<string>([
   'move',
   'attack',
   'capture',
+  'sabotage',
   'stop',
   'build',
   'train',
@@ -97,6 +98,9 @@ const seat = (v: unknown): v is number =>
   Number.isInteger(v) &&
   (v as number) >= 0 &&
   (v as number) < Limits.MaxPlayers;
+/** a road's link key: the ids of its two posts, '12_34' */
+const roadKey = (v: unknown): v is string =>
+  typeof v === 'string' && v.length <= 24 && /^\d+_\d+$/.test(v);
 const oneOf = <T extends string>(list: readonly T[], v: unknown): v is T =>
   list.includes(v as T);
 
@@ -115,12 +119,17 @@ export function cleanIntent(x: any): Intent | null {
             x: x.x | 0,
             y: x.y | 0,
             mode: x.mode === 'move' ? 'move' : 'amove',
+            ...(x.queue === true ? { queue: true } : {}),
           }
         : null;
     case 'attack':
     case 'capture':
       return ids(x.ids) && num(x.target)
         ? { t: x.t, ids: x.ids, target: x.target }
+        : null;
+    case 'sabotage':
+      return ids(x.ids) && roadKey(x.road) && num(x.x) && num(x.y)
+        ? { t: 'sabotage', ids: x.ids, road: x.road, x: x.x | 0, y: x.y | 0 }
         : null;
     case 'stop':
       return ids(x.ids) ? { t: 'stop', ids: x.ids } : null;

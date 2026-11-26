@@ -24,7 +24,13 @@ import {
   say,
 } from '../systems/diplomacy';
 import { trade } from '../systems/market';
-import { orderAttack, orderCapture, orderMove } from '../systems/movement';
+import { orderSabotage } from '../systems/sabotage';
+import {
+  orderAttack,
+  orderCapture,
+  orderMove,
+  queueMove,
+} from '../systems/movement';
 import { capturable } from '../systems/combat';
 import { canCapture } from '../systems/capture';
 import { cast, choosePath, pickPerk } from '../systems/paths';
@@ -55,7 +61,7 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
   };
   switch (c.t) {
     case 'move':
-      orderMove(
+      (c.queue ? queueMove : orderMove)(
         orderable(c.ids),
         c.x | 0,
         c.y | 0,
@@ -80,6 +86,13 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
       orderCapture(us, e);
       return null;
     }
+    case 'sabotage': {
+      const l = G.links.find(q => q.key === String(c.road));
+      if (!l || l.owner === seat) return null;
+      if (!hostile(seat, l.owner)) return msg('error.ally');
+      orderSabotage(orderable(c.ids), l, c.x | 0, c.y | 0);
+      return null;
+    }
     case 'stop':
       for (const u of mine(c.ids)) {
         u.path = null;
@@ -87,7 +100,9 @@ export function applyCommand(seat: number, c: Intent): GameMessage | null {
         u.tgt = 0;
         u.ftgt = 0;
         u.capB = 0;
+        u.task = null;
         u.order = null;
+        u.wps = null;
       }
       return null;
     case 'build':

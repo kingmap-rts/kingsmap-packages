@@ -1,6 +1,6 @@
 {
   "name": "@kingmap-rts/kingsmap-types",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Every type and shared constant of King's Map: game vocabulary, intents, messages, world, rule shapes, WebSocket protocol, match statistics and the backend HTTP API",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",

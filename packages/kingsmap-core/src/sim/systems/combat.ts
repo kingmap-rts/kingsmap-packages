@@ -9,6 +9,7 @@ import { hostile } from './diplomacy';
 import { findPath } from './pathfinding';
 import { memberLoss } from './squads';
 import { takeable } from './capture';
+import { taskLive } from './sabotage';
 import { dist, segmentDist, tileIndex, vecLen } from '../util/geometry';
 import { walkable } from '../world/terrain';
 import { rand } from '../util/rng';
@@ -241,6 +242,31 @@ function joinsMates(u: Unit) {
   return false;
 }
 
+/**
+ * u marches on an attack-move (KAN-61): it looks this much farther for foes than one standing, so a
+ * foe a little off the way is not walked past
+ */
+const MARCH_LOOK = 1;
+
+/**
+ * a unit on an attack-move (marching or at rest) turns on a foe that strikes it from this far
+ * (a trebuchet shoots from 5 tiles, farther than any soldier looks), tiles
+ */
+const STRUCK_LOOK = 7;
+
+const marching = (u: Unit) =>
+  u.order === 'amove' && !u.ftgt && !!(u.path && u.path.length);
+
+/** the foe t attacks u: u may answer it from farther than it would look for a foe (KAN-61) */
+const strikes = (t: Entity, u: Unit) =>
+  t.kind === 'u' && u.order === 'amove' && t.tgt === u.id && !t.dead;
+
+/** how far u runs after its foe t before it gives the chase up (without an attack order), tiles */
+export function chaseReach(u: Unit, t: Entity) {
+  const r = UNITS[u.type].aggro * 1.7;
+  return strikes(t, u) ? Math.max(r, STRUCK_LOOK + 0.5) : r;
+}
+
 /** how near a mate must fight for a unit at rest to join in, tiles */
 const MATES = 3;
 
@@ -319,6 +345,16 @@ export function acquireTarget(u: Unit) {
     u.tgt = 0;
     return;
   }
+  // a road task (KAN-60) lapses once the road is done or gone (or the unit walks to its squad)
+  if (u.task && (u.joinTo || !taskLive(u))) u.task = null;
+  if (u.task) {
+    // on its way it turns aside for nobody; at its spot it strikes only a foe within reach
+    const t = u.path && u.path.length ? null : foeInReach(u);
+    const id = t ? t.id : 0;
+    if (u.tgt !== id) u.slot = -1;
+    u.tgt = id;
+    return;
+  }
   if (u.order === 'move' && u.path && u.path.length && !u.ftgt) {
     u.tgt = 0;
     return;
@@ -365,14 +401,16 @@ export function acquireTarget(u: Unit) {
       !t.dead &&
       t.kind === 'u' &&
       hostile(u.owner, t.owner) &&
-      dist(t.x, t.y, u.x, u.y) < S.aggro * 1.7
+      dist(t.x, t.y, u.x, u.y) < chaseReach(u, t)
     ) {
       if (u.slot >= 0 || !surrounded(u, t)) return;
       waiting = true;
     }
   }
   let best = null;
-  let bd = S.aggro + (waiting || joinsMates(u) ? WAIT_LOOK : 0);
+  let bd =
+    S.aggro +
+    (waiting || joinsMates(u) ? WAIT_LOOK : marching(u) ? MARCH_LOOK : 0);
 
   if (u.type === 'siege') {
     // artillery prefers buildings in range, never chases: a trebuchet is a siege engine, it shells
@@ -397,8 +435,18 @@ export function acquireTarget(u: Unit) {
   // the nearest foe, but one already surrounded by our troops counts as farther: attackers spread
   // over the enemy instead of queueing behind each other for the same one
   let bs = 1e9;
+  const answers = u.order === 'amove' && S.aggro > 0;
+  let striker: Unit | null = null;
+  let sd = STRUCK_LOOK;
   for (const o of G.units) {
     if (o.dead || !hostile(u.owner, o.owner)) continue;
+    if (answers && o.tgt === u.id) {
+      const e = dist(o.x, o.y, u.x, u.y);
+      if (e < sd) {
+        sd = e;
+        striker = o;
+      }
+    }
     const d = Math.abs(o.x - u.x) + Math.abs(o.y - u.y);
     if (d > bd * 1.5) continue;
     const e = dist(o.x, o.y, u.x, u.y);
@@ -415,6 +463,8 @@ export function acquireTarget(u: Unit) {
       best = o;
     }
   }
+  // nobody near: on an attack-move, a foe striking it from afar (a trebuchet) is answered
+  if (!best) best = striker;
   if (best) bd = dist(best.x, best.y, u.x, u.y);
   if (!best) {
     bd = u.type === 'raid' ? 5 : 3.5;
@@ -435,6 +485,32 @@ export function acquireTarget(u: Unit) {
   if (had && !u.tgt && u.dest) {
     u.path = findPath(u.x | 0, u.y | 0, u.dest[0], u.dest[1]);
   }
+}
+
+/** the nearest foe (a unit, else a caravan) unit u reaches from where it stands, or null */
+function foeInReach(u: Unit): Entity | null {
+  const r = UNITS[u.type].range;
+  let best: Entity | null = null;
+  let bd = r;
+  for (const o of G.units) {
+    if (o.dead || !hostile(u.owner, o.owner)) continue;
+    if (Math.abs(o.x - u.x) > bd || Math.abs(o.y - u.y) > bd) continue;
+    const e = dist(o.x, o.y, u.x, u.y);
+    if (e <= bd) {
+      bd = e;
+      best = o;
+    }
+  }
+  if (best) return best;
+  for (const c of G.convoys) {
+    if (c.dead || !hostile(u.owner, c.owner)) continue;
+    const e = dist(c.x, c.y, u.x, u.y);
+    if (e <= bd) {
+      bd = e;
+      best = c;
+    }
+  }
+  return best;
 }
 
 export function hit(

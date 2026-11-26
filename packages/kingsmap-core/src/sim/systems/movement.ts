@@ -3,7 +3,7 @@ import type { Building, Entity, Tile, Unit } from '../world/types';
 import { MAP_H, MAP_W } from '../config/map';
 import { UNITS } from '../config/units';
 import { G } from '../state';
-import { onLane, overWater } from './bridges';
+import { laneExit, onLane, overWater, stepsAshore } from './bridges';
 import { bodiesNear, bodyR, partingBlows } from './combat';
 import { findPath } from './pathfinding';
 import { dist, segmentDist, tileIndex, vecLen } from '../util/geometry';
@@ -114,6 +114,14 @@ export function followPath(e: Unit, speed: number, dt: number) {
   }
   const x0 = e.x;
   const y0 = e.y;
+  // over a bridge's water, bound for a point off its own lane (its place in the ranks on the bank,
+  // a waypoint beside the bridge or on another bridge where two meet): along its file to the end
+  // first. Heading straight there, it would be held on the file and stand still (KAN-59)
+  const exit = !stepsAshore(e) && laneExit(e.x, e.y, tx, ty);
+  if (exit) {
+    moveToward(e, exit[0], exit[1], speed, dt);
+    if (e.x !== x0 || e.y !== y0) return false;
+  }
   if (moveToward(e, tx, ty, speed, dt)) {
     p.shift();
   } else if (e.x === x0 && e.y === y0) {
@@ -133,6 +141,22 @@ export const SPIRAL = (() => {
         if (Math.max(Math.abs(dx), Math.abs(dy)) === r) a.push([dx, dy]);
   return a;
 })();
+
+/** a tile to stand on: walkable and not over the water under a bridge */
+const dry = (x: number, y: number) => walkable(x, y) && !overWater(x, y);
+
+/** the first tile of SPIRAL round (x, y) that is `ok` and not taken, or null */
+function freeTile(
+  x: number,
+  y: number,
+  taken: Set<number>,
+  ok: (x: number, y: number) => boolean,
+): Tile | null {
+  for (const [ox, oy] of SPIRAL)
+    if (ok(x + ox, y + oy) && !taken.has(tileIndex(x + ox, y + oy)))
+      return [x + ox, y + oy];
+  return null;
+}
 
 /** room between neighbouring squads in a marching group's ranks, tiles (a squad is 1 tile wide) */
 const RANK = 1.4;
@@ -241,9 +265,11 @@ export function orderMove(
       u.chg = 0;
       u.chT = 0;
       u.capB = 0;
+      u.task = null;
       u.job = null;
       u.joinTo = 0;
       u.order = mode || 'amove';
+      u.wps = null;
     }
     return;
   }
@@ -270,21 +296,16 @@ export function orderMove(
       let ey = py + ay * lat - dy * r * RANK;
       ex = Math.max(0.5, Math.min(MAP_W - 0.5, ex));
       ey = Math.max(0.5, Math.min(MAP_H - 0.5, ey));
-      // its place falls on water, a mountain or a mate's tile: the nearest free walkable tile
+      // its place falls on water, a bridge, a mountain or a mate's tile: the nearest free walkable
+      // tile off the bridges (a unit standing on a bridge's single file would bar it, KAN-59)
       let gx = ex | 0;
       let gy = ey | 0;
       let exact = true;
-      if (!walkable(gx, gy) || taken.has(tileIndex(gx, gy))) {
+      if (!dry(gx, gy) || taken.has(tileIndex(gx, gy))) {
         exact = false;
-        for (const [ox, oy] of SPIRAL) {
-          const x = gx + ox;
-          const y = gy + oy;
-          if (walkable(x, y) && !taken.has(tileIndex(x, y))) {
-            gx = x;
-            gy = y;
-            break;
-          }
-        }
+        const spot =
+          freeTile(gx, gy, taken, dry) || freeTile(gx, gy, taken, walkable);
+        if (spot) [gx, gy] = spot;
       }
       taken.add(tileIndex(gx, gy));
       let end: Tile = exact ? [ex, ey] : [gx + 0.5, gy + 0.5];
@@ -324,10 +345,95 @@ export function orderMove(
     u.chg = 0;
     u.chT = 0;
     u.capB = 0;
+    u.task = null;
     u.job = null;
     u.joinTo = 0;
     u.order = mode || 'amove';
+    u.wps = null;
   }
+}
+
+/**
+ * Shift+click (KAN-61): (tx, ty) goes after the points the units already march to. Each unit keeps
+ * its place in the group: its spot there is the point plus where it stands (or ends) now from the
+ * group's middle. A group with nowhere to go yet gets a plain order instead.
+ */
+export function queueMove(
+  units: Unit[],
+  tx: number,
+  ty: number,
+  mode?: 'move' | 'amove',
+) {
+  tx = Math.max(0, Math.min(MAP_W - 1, tx | 0));
+  ty = Math.max(0, Math.min(MAP_H - 1, ty | 0));
+  if (!units.length) return;
+  const busy = (u: Unit) =>
+    !!(u.path && u.path.length) || !!(u.wps && u.wps.length) || !!u.ftgt;
+  if (!units.some(busy)) {
+    orderMove(units, tx, ty, mode);
+    return;
+  }
+  // where each unit will be once its marches so far are done
+  const last = (u: Unit): Tile => {
+    const w = u.wps && u.wps[u.wps.length - 1];
+    if (w) return [w.x, w.y];
+    if (u.end) return u.end;
+    if (u.dest) return [u.dest[0] + 0.5, u.dest[1] + 0.5];
+    return [u.x, u.y];
+  };
+  const at = units.map(last);
+  let cx = 0;
+  let cy = 0;
+  for (const [x, y] of at) {
+    cx += x;
+    cy += y;
+  }
+  cx /= units.length;
+  cy /= units.length;
+  units.forEach((u, i) => {
+    const x = Math.max(0.5, Math.min(MAP_W - 0.5, tx + 0.5 + at[i][0] - cx));
+    const y = Math.max(0.5, Math.min(MAP_H - 0.5, ty + 0.5 + at[i][1] - cy));
+    // (a full queue drops its oldest point: a bound on what a stream of clicks can pile up)
+    const wps = (u.wps ||= []);
+    if (wps.length >= MAX_WPS) wps.shift();
+    wps.push({ x, y, mode: mode || 'amove' });
+  });
+}
+
+/** points one unit may have queued */
+const MAX_WPS = 16;
+
+/**
+ * The unit has done its march: it sets off to the next queued point, alone and at its own pace
+ * (its mates set off as they arrive, each to its own spot, so the group keeps its shape).
+ */
+export function nextLeg(u: Unit) {
+  const w = u.wps && u.wps.shift();
+  if (!u.wps || !u.wps.length) u.wps = null;
+  if (!w) return;
+  let gx = w.x | 0;
+  let gy = w.y | 0;
+  let end: Tile = [w.x, w.y];
+  if (!walkable(gx, gy)) {
+    for (const [ox, oy] of SPIRAL)
+      if (walkable(gx + ox, gy + oy)) {
+        gx += ox;
+        gy += oy;
+        end = [gx + 0.5, gy + 0.5];
+        break;
+      }
+  }
+  if (overWater(end[0], end[1])) end = onLane(end[0], end[1]) || end;
+  if (w.mode === 'move') partingBlows(u);
+  u.path = findPath(u.x | 0, u.y | 0, gx, gy);
+  u.dest = [gx, gy];
+  u.end = end;
+  u.gsp = 1;
+  u.tgt = 0;
+  u.slot = -1;
+  u.chg = 0;
+  u.chT = 0;
+  u.order = w.mode;
 }
 
 /**
@@ -348,8 +454,10 @@ export function orderAttack(units: Unit[], ent: Entity) {
     u.end = null;
     u.joinTo = 0;
     u.order = 'amove';
+    u.wps = null;
     u.ftgt = ent.id;
     u.capB = 0;
+    u.task = null;
     u.tgt = ent.id;
     u.path = null;
     u.repath = 0;

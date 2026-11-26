@@ -1,6 +1,7 @@
 /** Bot brain: specialise, expand, hire, defend and raid. */
 import type {
   Building,
+  Link,
   Player,
   SpecType,
   Unit,
@@ -30,6 +31,7 @@ import { G, depositMap, sites, terrainMap } from '../state';
 import { hostile } from '../systems/diplomacy';
 import { newPostRoads } from '../systems/network';
 import { orderAttack, orderMove } from '../systems/movement';
+import { orderSabotage } from '../systems/sabotage';
 import { soldierCount } from '../systems/squads';
 import { dist, tileIndex, detCos, detSin, inBounds } from '../util/geometry';
 import { goodsTotal } from '../util/resources';
@@ -40,6 +42,9 @@ import {
   isDepot,
   nearestLinkedDepot,
 } from '../world/entities';
+
+/** how long a bot's raider sent to burn a road waits there at most (a road that will not burn) */
+const CUT_WAIT = 45;
 
 /**
  * Troops never attack buildings by themselves (KAN-41): the bot's assault troops (a wave, or the
@@ -244,8 +249,12 @@ export function botTick(p: Player) {
     if (!('key' in u)) army.push(u);
   }
   // 4. military
+  // (a raider sent to burn a road is busy while that task lasts, KAN-60; its job only caps the wait)
   const idle = army.filter(
-    u => !u.tgt && (!u.path || !u.path.length) && !(u.job && u.jobUntil > G.t),
+    u =>
+      !u.tgt &&
+      (!u.path || !u.path.length) &&
+      !(u.job && u.jobUntil > G.t && (u.job !== 'cut' || u.task)),
   );
   let threat = null;
   let td = 1e9;
@@ -365,6 +374,7 @@ export function botTick(p: Player) {
       if (P.smartCut) {
         // focused sabotage of trunk lines next to enemy HQs
         let bl = null;
+        let road: Link | null = null;
         let bd = 1e9;
         for (const l of G.links) {
           if (!hostile(p.id, l.owner) || l.blocked || !G.players[l.owner].alive)
@@ -378,12 +388,13 @@ export function botTick(p: Player) {
           if (d < bd) {
             bd = d;
             bl = [mx, my_];
+            road = l;
           }
         }
-        if (bl) {
-          orderMove([u], bl[0] | 0, bl[1] | 0, 'move');
+        if (bl && road) {
+          orderSabotage([u], road, bl[0] | 0, bl[1] | 0);
           u.job = 'cut';
-          u.jobUntil = G.t + 16;
+          u.jobUntil = G.t + CUT_WAIT;
           continue;
         }
       }
@@ -416,6 +427,7 @@ export function botTick(p: Player) {
       if (roll < 0.85 && P.cutMin < 99) {
         // sabotage a line
         let bl = null;
+        let road: Link | null = null;
         let bd = 34;
         for (const l of G.links) {
           if (!hostile(p.id, l.owner) || l.blocked || !G.players[l.owner].alive)
@@ -427,12 +439,13 @@ export function botTick(p: Player) {
           if (d < bd) {
             bd = d;
             bl = [mx, my_];
+            road = l;
           }
         }
-        if (bl) {
-          orderMove([u], bl[0] | 0, bl[1] | 0, 'move');
+        if (bl && road) {
+          orderSabotage([u], road, bl[0] | 0, bl[1] | 0);
           u.job = 'cut';
-          u.jobUntil = G.t + 14;
+          u.jobUntil = G.t + CUT_WAIT;
           continue;
         }
       }

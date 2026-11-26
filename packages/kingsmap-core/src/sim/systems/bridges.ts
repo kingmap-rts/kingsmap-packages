@@ -157,7 +157,7 @@ function nearestLane(x: number, y: number) {
   const L = lanesOf.get(matchState) || indexLanes();
   const ids = L.at.get((y | 0) * MAP_W + (x | 0));
   if (!ids) return null;
-  let best: { x: number; y: number; d: number } | null = null;
+  let best: { x: number; y: number; d: number; id: number } | null = null;
   for (const id of ids) {
     const x0 = L.ends[id * 4];
     const y0 = L.ends[id * 4 + 1];
@@ -169,7 +169,7 @@ function nearestLane(x: number, y: number) {
     const px = x0 + dx * t;
     const py = y0 + dy * t;
     const d = Math.sqrt((x - px) * (x - px) + (y - py) * (y - py));
-    if (!best || d < best.d) best = { x: px, y: py, d };
+    if (!best || d < best.d) best = { x: px, y: py, d, id };
   }
   return best;
 }
@@ -190,12 +190,79 @@ export function onLane(x: number, y: number): [number, number] | null {
   return walkable(n.x | 0, n.y | 0) ? [n.x, n.y] : null;
 }
 
+/** a point this close to a lane lies on it; a unit this close to a lane's end stands at it, tiles */
+const ON = 0.1;
+
+/** distance from (x, y) to the lane `id`, tiles */
+function laneDist(L: Lanes, id: number, x: number, y: number) {
+  const x0 = L.ends[id * 4];
+  const y0 = L.ends[id * 4 + 1];
+  const dx = L.ends[id * 4 + 2] - x0;
+  const dy = L.ends[id * 4 + 3] - y0;
+  const l2 = dx * dx + dy * dy;
+  const t = l2
+    ? Math.max(0, Math.min(1, ((x - x0) * dx + (y - y0) * dy) / l2))
+    : 0;
+  const px = x0 + dx * t - x;
+  const py = y0 + dy * t - y;
+  return Math.sqrt(px * px + py * py);
+}
+
+/**
+ * Where a unit at (x, y) over the water of a bridge heads first on its way to the point (tx, ty)
+ * that does not lie on its own lane (a place on the bank beside the bridge, a waypoint on another
+ * lane where two bridges meet): the end of its own lane nearer to that point, so it walks the file
+ * there instead of cutting across the planks. Kept on its lane, it would stand still (KAN-59).
+ * Null when (x, y) is not over a bridge's water, the point lies on its lane, or the unit already
+ * stands at that end.
+ */
+export function laneExit(
+  x: number,
+  y: number,
+  tx: number,
+  ty: number,
+): [number, number] | null {
+  if (!overWater(x, y)) return null;
+  const n = nearestLane(x, y);
+  if (!n) return null;
+  const L = lanesOf.get(matchState)!;
+  if (laneDist(L, n.id, tx, ty) <= ON) return null;
+  const e = L.ends;
+  const i = n.id * 4;
+  const d0 = (e[i] - tx) ** 2 + (e[i + 1] - ty) ** 2;
+  const d1 = (e[i + 2] - tx) ** 2 + (e[i + 3] - ty) ** 2;
+  const [ex, ey] = d0 <= d1 ? [e[i], e[i + 1]] : [e[i + 2], e[i + 3]];
+  if (!walkable(ex | 0, ey | 0)) return null;
+  const ox = ex - x;
+  const oy = ey - y;
+  return Math.sqrt(ox * ox + oy * oy) <= ON ? null : [ex, ey];
+}
+
+/**
+ * The unit steps off a bridge sideways: its next waypoint is a tile of the bank next to the one it
+ * stands on and away from the bridge's middle line (a way along the shore that cuts the corner of
+ * a bridge's tile, or one that leaves a bridge by its side near its end). It walks there straight,
+ * over a little water: kept on the middle line, or sent along it to the bridge's end, it would be
+ * turned back and never get off (KAN-59).
+ */
+export function stepsAshore(u: Unit) {
+  if (!u.path || !u.path.length) return false;
+  const [wx, wy] = u.path[0];
+  return (
+    Math.abs(wx - (u.x | 0)) <= 1 &&
+    Math.abs(wy - (u.y | 0)) <= 1 &&
+    walkable(wx, wy) &&
+    !overWater(wx + 0.5, wy + 0.5) &&
+    !onLane(wx + 0.5, wy + 0.5)
+  );
+}
+
 /** keeps every unit standing over the water of a bridge on its middle line (after separation) */
 export function keepOnBridges() {
   for (const u of G.units) {
     if (u.dead || !overWater(u.x, u.y)) continue;
     const n = nearestLane(u.x, u.y);
-    if (!n || n.d <= LANE) continue;
+    if (!n || n.d <= LANE || stepsAshore(u)) continue;
     const k = (n.d - LANE) / n.d;
     const x = u.x + (n.x - u.x) * k;
     const y = u.y + (n.y - u.y) * k;
@@ -206,13 +273,10 @@ export function keepOnBridges() {
 }
 
 /**
- * Two mates walking a bridge toward each other pass through each other: on its middle line they
- * cannot step aside, and shoving would hold both on the bridge for good.
+ * Mates pass through each other on a bridge (KAN-59): on its single file nobody can step aside, so
+ * a mate standing on it (fighting, or left there), a slower one ahead, or one coming the other way
+ * would otherwise bar the file for good. It holds when either of the two stands over the water, so
+ * one still on the bank by the bridge's end does not bar one already on it either. Foes still meet.
  */
 export const passOnBridge = (a: Unit, b: Unit) =>
-  !hostile(a.owner, b.owner) &&
-  !!a.path?.length &&
-  !!b.path?.length &&
-  a.hx * b.hx + a.hy * b.hy < 0 &&
-  overWater(a.x, a.y) &&
-  overWater(b.x, b.y);
+  !hostile(a.owner, b.owner) && (overWater(a.x, a.y) || overWater(b.x, b.y));
