@@ -16,6 +16,7 @@ import { rand } from '../util/rng';
 import { lootCarried, centerX, centerY } from '../world/entities';
 import { logEvent, msg, notify } from '../world/events';
 import { gain } from '../ledger';
+import { unitsNear } from '../world/unitGrid';
 
 export function kill(e: Entity, silent?: boolean, by?: number) {
   if (e.dead) return;
@@ -322,7 +323,9 @@ export function bodiesNear(x: number, y: number): number[] {
  */
 export function partingBlows(u: Unit) {
   if (u.dead) return;
-  for (const e of G.units) {
+  // (a melee unit reaches 2 tiles at most)
+  for (const i of unitsNear(u.x, u.y, 2)) {
+    const e = G.units[i];
     if (e.dead || e.tgt !== u.id || !melee(e) || !UNITS[e.type].dmg) continue;
     if (!hostile(e.owner, u.owner)) continue;
     if (dist(e.x, e.y, u.x, u.y) > UNITS[e.type].range) continue;
@@ -372,7 +375,8 @@ export function acquireTarget(u: Unit) {
       // the ordered foe has all its sides taken by our troops: fight one beside it meanwhile
       if (f.kind === 'u' && melee(u) && surrounded(u, f)) {
         let bd = ASIDE;
-        for (const o of G.units) {
+        for (const i of unitsNear(f.x, f.y, ASIDE)) {
+          const o = G.units[i];
           if (o.dead || o === f || !hostile(u.owner, o.owner)) continue;
           if (Math.abs(o.x - f.x) > bd || Math.abs(o.y - f.y) > bd) continue;
           const e = dist(o.x, o.y, f.x, f.y);
@@ -438,7 +442,8 @@ export function acquireTarget(u: Unit) {
   const answers = u.order === 'amove' && S.aggro > 0;
   let striker: Unit | null = null;
   let sd = STRUCK_LOOK;
-  for (const o of G.units) {
+  for (const i of unitsNear(u.x, u.y, answers ? Math.max(bd, sd) : bd)) {
+    const o = G.units[i];
     if (o.dead || !hostile(u.owner, o.owner)) continue;
     if (answers && o.tgt === u.id) {
       const e = dist(o.x, o.y, u.x, u.y);
@@ -492,7 +497,8 @@ function foeInReach(u: Unit): Entity | null {
   const r = UNITS[u.type].range;
   let best: Entity | null = null;
   let bd = r;
-  for (const o of G.units) {
+  for (const i of unitsNear(u.x, u.y, r)) {
+    const o = G.units[i];
     if (o.dead || !hostile(u.owner, o.owner)) continue;
     if (Math.abs(o.x - u.x) > bd || Math.abs(o.y - u.y) > bd) continue;
     const e = dist(o.x, o.y, u.x, u.y);

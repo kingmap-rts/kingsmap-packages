@@ -14,6 +14,7 @@ import {
   vecLen,
 } from '../util/geometry';
 import { paceAt, walkable } from '../world/terrain';
+import { unitMoved } from '../world/unitGrid';
 
 export function moveToward(
   e: Unit,
@@ -41,6 +42,7 @@ export function moveToward(
   } else if (walkable(e.x | 0, ny | 0)) {
     e.y = ny;
   } else return false;
+  unitMoved(e);
   e.mv = 1;
   return st >= d;
 }
@@ -524,6 +526,7 @@ export function wade(u: Unit, speed: number, dt: number): boolean {
   if (d > 1e-4) {
     u.x += (dx / d) * st;
     u.y += (dy / d) * st;
+    unitMoved(u);
     u.ang = detAtan2(dy, dx);
     turn(u, dx / d, dy / d);
   }

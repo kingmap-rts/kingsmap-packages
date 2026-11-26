@@ -13,6 +13,7 @@ import { bridgeLanes, bridgeTiles } from './roads';
 import { hostile } from './diplomacy';
 import { walkable } from '../world/terrain';
 import { sq } from '../util/geometry';
+import { unitMoved } from '../world/unitGrid';
 
 /** does the bridge of this road stand? (while the road is there and not burning) */
 export const bridgeStands = (l: Link) => (G.sab.get(l.key) || 0) <= G.t;
@@ -270,6 +271,7 @@ export function keepOnBridges() {
     if (!walkable(x | 0, y | 0)) continue;
     u.x = x;
     u.y = y;
+    unitMoved(u);
   }
 }
 

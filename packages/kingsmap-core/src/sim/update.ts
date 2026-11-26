@@ -64,6 +64,12 @@ import { rand } from './util/rng';
 import { centerX, centerY, isDepot } from './world/entities';
 import { msg, notify, snapshot } from './world/events';
 import { walkable } from './world/terrain';
+import {
+  dropUnitGrid,
+  fileUnits,
+  unitMoved,
+  unitsNear,
+} from './world/unitGrid';
 
 /** scratch for a turret's volley: its nearest foes in reach and their distances */
 const volleyU: (Unit | null)[] = new Array(ARCHERS_MAX).fill(null);
@@ -158,6 +164,8 @@ export function update(dt: number) {
     }
   }
   for (const p of G.players) if (p.res.food < 0) p.res.food = 0;
+  // the grid of units for finding foes near a point, kept up to date till the end of the tick
+  fileUnits();
   // depots
   for (const b of G.buildings) {
     if (b.dead || !isDepot(b)) continue;
@@ -171,7 +179,8 @@ export function update(dt: number) {
         const cx = b.x + 0.5;
         const cy = b.y + 0.5;
         let k = 0;
-        for (const u of G.units) {
+        for (const j of unitsNear(cx, cy, ARROW_RANGE)) {
+          const u = G.units[j];
           if (u.dead || !hostile(b.owner, u.owner)) continue;
           if (
             Math.abs(u.x - cx) > ARROW_RANGE ||
@@ -459,6 +468,7 @@ export function update(dt: number) {
       botTick(p);
     }
   }
+  dropUnitGrid();
   if (G.units.some(u => u.dead)) {
     for (const u of G.units) if (u.dead) G.byId.delete(u.id);
     G.units = G.units.filter(u => !u.dead);
@@ -626,10 +636,12 @@ function separate() {
       if (walkable((a.x - px * ga) | 0, (a.y - py * ga) | 0)) {
         a.x -= px * ga;
         a.y -= py * ga;
+        unitMoved(a);
       }
       if (walkable((b.x + px * gb) | 0, (b.y + py * gb) | 0)) {
         b.x += px * gb;
         b.y += py * gb;
+        unitMoved(b);
       }
     }
   }
