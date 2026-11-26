@@ -57,7 +57,7 @@ export function sabotageTick(dt: number) {
       pr.p += dt;
       G.sabProg.set(l.key, pr);
       const att = G.players[raider.owner];
-      const dur = burnTime(att, G.players[l.owner]);
+      const dur = burnTime(att);
       if (pr.p >= arsonTime(att)) {
         G.sab.set(l.key, G.t + dur);
         if (hasPerk(att, 'scorch'))

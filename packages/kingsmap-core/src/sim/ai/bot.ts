@@ -219,13 +219,15 @@ export function botTick(p: Player) {
     )
       type = 'siege';
     // a doctrine unit now and then, only when it is affordable (otherwise hire the usual soldier) and useful:
-    // builders only while one of our roads burns, arsonists only once there is an enemy network to burn
+    // builders only while one of our roads burns or a building is badly hurt, arsonists only once there is an enemy network to burn
     const uu = p.doc ? PATHS[p.doc].unit : undefined;
     if (uu && unitUnlocked(p, uu) && type !== 'wagon' && rand() < 0.22) {
       const lim = uu === 'militia' ? 14 : uu === 'golem' ? 4 : 3;
       const useful =
         uu === 'builder'
-          ? G.links.some(l => l.owner === p.id && (G.sab.get(l.key) || 0) > G.t)
+          ? G.links.some(
+              l => l.owner === p.id && (G.sab.get(l.key) || 0) > G.t,
+            ) || my.some(b => b.hp < b.maxhp * 0.7)
           : uu === 'arsonist'
             ? G.t > 300
             : true;
@@ -312,6 +314,24 @@ export function botTick(p: Player) {
         w.job = 'reload';
         w.jobUntil = G.t + 40;
       }
+    }
+  }
+  // builders mend: an idle one walks to the nearest damaged building of ours
+  for (const u of idle.filter(u => u.type === 'builder')) {
+    let best: Building | null = null;
+    let bd = 15;
+    for (const b of my) {
+      if (b.hp >= b.maxhp * 0.9) continue;
+      const d = dist(b.x + 0.5, b.y + 0.5, u.x, u.y);
+      if (d < bd) {
+        bd = d;
+        best = b;
+      }
+    }
+    if (best && bd > 1.5) {
+      orderMove([u], best.x, best.y + 1, 'move');
+      u.job = 'return';
+      u.jobUntil = G.t + 20;
     }
   }
   botPaths(p, army, threat, td);

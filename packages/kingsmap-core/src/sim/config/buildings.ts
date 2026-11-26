@@ -65,3 +65,12 @@ export const SITE_TYPES: Record<SiteType, SiteSpec> = {
 };
 
 export const SITE_WORKERS = 4;
+
+/** builders mend a building of their realm they stand by (tiles from its centre) */
+export const REPAIR_R = 2.2;
+/** health a second one builder gives back, and how many builders work on one building at once */
+export const BUILDER_REPAIR = 6;
+export const REPAIR_CREW_MAX = 3;
+/** repair crews (perk): a building left alone this long (s) mends itself this fast (health a second) */
+export const REPAIR_CALM = 8;
+export const REPAIR_SELF = 2;

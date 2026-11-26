@@ -41,9 +41,8 @@ export const siteWorkers = (p: Player) =>
 export const arsonTime = (att: Player) =>
   hasPerk(att, 'arson') ? 4 : ARSON_TIME;
 
-export const burnTime = (att: Player, def: Player) =>
-  (hasPerk(att, 'burn60') ? 60 : BURN_TIME) *
-  (hasPerk(def, 'repair') ? 0.5 : 1);
+export const burnTime = (att: Player) =>
+  hasPerk(att, 'burn60') ? 60 : BURN_TIME;
 
 export const forgeBonus = (p: Player) => (hasPerk(p, 'bellows') ? 1.6 : 1);
 

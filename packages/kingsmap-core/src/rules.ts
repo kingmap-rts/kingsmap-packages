@@ -44,6 +44,11 @@ export {
   ARROW_RANGE,
   SITE_TYPES,
   SITE_WORKERS,
+  REPAIR_R,
+  BUILDER_REPAIR,
+  REPAIR_CREW_MAX,
+  REPAIR_CALM,
+  REPAIR_SELF,
 } from './sim/config/buildings';
 
 // ---- economy ----

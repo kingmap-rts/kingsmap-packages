@@ -55,6 +55,7 @@ import {
 import { recomputeNetwork } from './systems/network';
 import { findPath } from './systems/pathfinding';
 import { fireRainTick } from './systems/paths';
+import { repairTick } from './systems/repair';
 import { arsonTick } from './systems/sabotage';
 import { joinTick, memberLoss, squadTick } from './systems/squads';
 import { dominationTick } from './systems/victory';
@@ -298,6 +299,7 @@ export function update(dt: number) {
     c.dead = true;
   }
   fireRainTick(dt);
+  repairTick(dt);
   diploTick();
   joinTick();
   G.sqT -= dt;
