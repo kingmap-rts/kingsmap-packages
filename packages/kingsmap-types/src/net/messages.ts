@@ -16,13 +16,19 @@ export interface LobbyPlayer {
  * Why the server refused a lobby action; the client shows the text in the player's language.
  * `update_required`: the client's core (`hello.core`) is not the server's major.minor, or it sent
  * none; the server lets it in nowhere and the client should load the new build.
+ * `server_updating`: this server instance is shutting down for an update (drain): it starts no new
+ * rooms or matches; the client should reconnect in a moment (it reaches the new instance).
+ * `server_restart`: sent to players of a running match while the server drains: the match goes on,
+ * but the server stops in `secs` seconds at the latest (the match is then cut off).
  */
 export type ServerError =
   | 'hello_first'
   | 'room_not_found'
   | 'room_started'
   | 'room_full'
-  | 'update_required';
+  | 'update_required'
+  | 'server_updating'
+  | 'server_restart';
 
 /** what a started match is doing before its first turn (see the `prestart` message) */
 export type PrestartPhase = 'waiting' | 'countdown';
@@ -107,4 +113,5 @@ export type ServerMsg =
       online?: number;
     }
   | { t: 'desync'; n: number }
-  | { t: 'err'; code: ServerError };
+  /** `secs`: with `server_restart`, seconds until the server stops at the latest */
+  | { t: 'err'; code: ServerError; secs?: number };
