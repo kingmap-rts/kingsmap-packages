@@ -3,10 +3,11 @@
  * `Authorization: Bearer …`; the refresh token lives in an httpOnly cookie the browser sends to
  * /api/auth/* by itself (fetch with `credentials: 'include'`).
  *
- *   GET   /api/auth/providers          → AuthProvider[]   (the ones configured on the server)
+ *   GET   /api/auth/providers          → AuthProvider[]   (the OAuth ones configured on the server)
  *   POST  /api/auth/guest              ← GuestSignInRequest → AuthSession   (+ refresh cookie)
- *   POST  /api/auth/refresh            (cookie)             → AuthSession · 401
- *   POST  /api/auth/logout             (cookie)             → 204
+ *   POST  /api/auth/refresh            (cookie) ← RefreshRequest → AuthSession · 401
+ *   POST  /api/auth/logout             (cookie) ← RefreshRequest → 204
+ *   POST  /api/auth/crazygames         ← CrazyGamesSignInRequest → AuthSession · 401 · 404 (off)
  *   GET   /api/auth/:provider          → 302 to Google / Discord
  *   GET   /api/auth/:provider/callback → 302 to the game: ?auth=ok | ?auth=error&reason=AuthFailure
  *   GET   /api/me                      (Bearer)             → UserProfile
@@ -14,11 +15,28 @@
  *
  * Signing in with a provider while a guest links it to the guest (rating and history stay); if
  * that provider account already belongs to someone, the player signs into that account instead.
+ *
+ * Inside a game portal's iframe (CrazyGames) the API's cookie is third-party and the browser
+ * drops it. There the page keeps the refresh token itself (`tokenInBody`, see `BodyTokenRequest`).
  */
 import type { UserProfile } from './user';
 
+/**
+ * The refresh token in the body instead of the cookie (a portal iframe, where cookies are dropped).
+ * With `tokenInBody` the server ignores the cookie, sets none and answers with
+ * `AuthSession.refreshToken`; the page stores it and sends it back as `refreshToken`.
+ */
+export interface BodyTokenRequest {
+  tokenInBody?: boolean;
+  /** the refresh token the page keeps (body mode only) */
+  refreshToken?: string;
+}
+
+/** body of refresh and logout; empty on kingsmap.com (the cookie is used) */
+export type RefreshRequest = BodyTokenRequest;
+
 /** first visit: creates a guest account */
-export interface GuestSignInRequest {
+export interface GuestSignInRequest extends BodyTokenRequest {
   /** cleaned by the server; a default name when empty or offensive */
   nickname?: string;
   /** UI language, e.g. 'uk' */
@@ -32,6 +50,19 @@ export interface AuthSession {
   /** seconds until the access token expires; refresh a bit earlier */
   expiresIn: number;
   user: UserProfile;
+  /** only in body mode (`tokenInBody`): the new refresh token, which replaces the old one */
+  refreshToken?: string;
+}
+
+/**
+ * Sign-in with a CrazyGames account inside their portal. Always body mode: the answer carries the
+ * refresh token, and `refreshToken` (the guest playing on this device) gets the account linked.
+ */
+export interface CrazyGamesSignInRequest extends BodyTokenRequest {
+  /** `CrazyGames.SDK.user.getUserToken()`: a JWT, valid for an hour */
+  token: string;
+  /** UI language of a brand-new account, e.g. 'en' */
+  locale?: string;
 }
 
 export interface UpdateProfileRequest {
