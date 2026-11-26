@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Private packages of the King's Map game shared by kingsmap-front and kingsmap-backend",
+  "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
@@ -35,15 +36,16 @@
     "url": "https://github.com/kingmap-rts/kingsmap-packages/issues"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.20.5",
     "dotenv-cli": "^7.4.4",
-    "eslint": "^8.57.0",
-    "eslint-config-prettier": "^9.1.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
     "lerna": "^8.1.9",
-    "prettier": "^3.3.3",
-    "typescript": "^5.6.3"
+    "prettier": "^3.10.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.74.0"
   },
   "packageManager": "yarn@4.9.2"
 }
