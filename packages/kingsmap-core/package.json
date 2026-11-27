@@ -1,6 +1,6 @@
 {
   "name": "@kingmap-rts/kingsmap-core",
-  "version": "0.21.2",
+  "version": "0.21.3",
   "description": "Deterministic simulation of King's Map (lockstep): the same seed and intents give the same world in the browser and on the server",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",

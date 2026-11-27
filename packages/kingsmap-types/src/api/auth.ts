@@ -8,6 +8,7 @@
  *   POST  /api/auth/refresh            (cookie) ← RefreshRequest → AuthSession · 401
  *   POST  /api/auth/logout             (cookie) ← RefreshRequest → 204
  *   POST  /api/auth/crazygames         ← CrazyGamesSignInRequest → AuthSession · 401 · 404 (off)
+ *   POST  /api/auth/discord-activity   ← DiscordActivitySignInRequest → DiscordActivitySession · 401 · 404 (off)
  *   GET   /api/auth/:provider          → 302 to Google / Discord
  *   GET   /api/auth/:provider/callback → 302 to the game: ?auth=ok | ?auth=error&reason=AuthFailure
  *   GET   /api/me                      (Bearer)             → UserProfile
@@ -16,7 +17,7 @@
  * Signing in with a provider while a guest links it to the guest (rating and history stay); if
  * that provider account already belongs to someone, the player signs into that account instead.
  *
- * Inside a game portal's iframe (CrazyGames) the API's cookie is third-party and the browser
+ * Inside a game portal's iframe (CrazyGames, a Discord Activity) the API's cookie is third-party and the browser
  * drops it. There the page keeps the refresh token itself (`tokenInBody`, see `BodyTokenRequest`).
  */
 import type { UserProfile } from './user';
@@ -63,6 +64,25 @@ export interface CrazyGamesSignInRequest extends BodyTokenRequest {
   token: string;
   /** UI language of a brand-new account, e.g. 'en' */
   locale?: string;
+}
+
+/**
+ * Sign-in inside a Discord Activity (the game in a voice channel). The page gets `code` from the
+ * Embedded App SDK's `authorize` command; the server trades it for a Discord access token with the
+ * app's secret and signs the player into the account of that Discord user (the same one a Discord
+ * sign-in on kingsmap.com gives). Always body mode, like CrazyGames.
+ */
+export interface DiscordActivitySignInRequest extends BodyTokenRequest {
+  /** `discordSdk.commands.authorize()` → `code` (single use, minutes) */
+  code: string;
+  /** UI language of a brand-new account, e.g. 'en' */
+  locale?: string;
+}
+
+/** answer of the Discord Activity sign-in: our session plus the token for the SDK */
+export interface DiscordActivitySession extends AuthSession {
+  /** Discord's OAuth access token, for `discordSdk.commands.authenticate({ access_token })` */
+  discordAccessToken: string;
 }
 
 export interface UpdateProfileRequest {
